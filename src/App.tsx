@@ -69,18 +69,18 @@ export default function App() {
     <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans selection:bg-cyan-500/30 selection:text-cyan-200 overflow-x-hidden">
       
       {/* Animated Deep Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-zinc-950">
         <motion.div 
-          animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.3, 0.15] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-[20%] -left-[10%] w-[50vw] h-[50vw] rounded-full bg-cyan-600/20 blur-[120px]" 
+          animate={{ scale: [1, 1.1, 1], opacity: [0.15, 0.3, 0.15] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+          className="absolute top-[-50%] left-[-50%] w-[100vw] h-[100vw] rounded-full bg-cyan-900/30 blur-[120px] transform-gpu will-change-transform translate-x-[25%] translate-y-[25%]" 
         />
         <motion.div 
-          animate={{ scale: [1, 1.5, 1], opacity: [0.1, 0.25, 0.1] }}
-          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute top-[40%] -right-[20%] w-[60vw] h-[60vw] rounded-full bg-violet-600/20 blur-[150px]" 
+          animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.25, 0.1] }}
+          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+          className="absolute bottom-[-50%] right-[-50%] w-[100vw] h-[100vw] rounded-full bg-violet-900/30 blur-[150px] transform-gpu will-change-transform translate-x-[-25%] translate-y-[-25%]" 
         />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03]"></div>
       </div>
 
       {/* Navigation */}
@@ -118,8 +118,12 @@ export default function App() {
               transition={{ duration: 0.8, ease: "easeOut" }}
               className="relative mb-8"
             >
-              <div className="absolute inset-0 rounded-full blur-xl bg-gradient-to-r from-cyan-500 to-violet-500 opacity-50 animate-pulse"></div>
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-2 border-white/20 p-2 relative bg-zinc-950/50 backdrop-blur-sm z-10 flex items-center justify-center">
+              <motion.div 
+                animate={{ scale: [1, 1.05, 1], opacity: [0.4, 0.7, 0.4] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute inset-0 rounded-full blur-2xl bg-gradient-to-r from-cyan-500 to-violet-500 transform-gpu will-change-transform"
+              ></motion.div>
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-2 border-white/20 p-2 relative bg-zinc-950 shadow-2xl z-10 flex items-center justify-center">
                  <User className="w-16 h-16 text-zinc-300" />
               </div>
             </motion.div>
@@ -171,8 +175,8 @@ export default function App() {
           {/* Scroll Indicator */}
           <motion.div 
             animate={{ y: [0, 10, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-zinc-500"
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-zinc-500 transform-gpu will-change-transform"
           >
             <span className="text-xs font-mono uppercase tracking-widest">Scroll</span>
             <div className="w-px h-12 bg-gradient-to-b from-zinc-500 to-transparent"></div>
@@ -198,10 +202,10 @@ export default function App() {
                 <motion.div 
                   key={index}
                   variants={fadeInUp} 
-                  whileHover={{ y: -5, scale: 1.01 }}
-                  className="group relative rounded-3xl bg-white/[0.03] border border-white/10 p-8 overflow-hidden hover:bg-white/[0.05] transition-all duration-300 flex flex-col"
+                  whileHover={{ y: -8 }}
+                  className="group relative rounded-3xl bg-zinc-900/40 border border-t-white/10 border-white/5 p-8 overflow-hidden hover:bg-zinc-800/60 transition-colors duration-300 flex flex-col transform-gpu shadow-2xl outline-none"
                 >
-                  <div className={`absolute top-0 right-0 w-64 h-64 bg-gradient-to-br ${app.color} rounded-full blur-[100px] opacity-10 group-hover:opacity-30 transition-opacity duration-500`}></div>
+                  <div className={`absolute top-0 right-0 w-64 h-64 bg-gradient-to-br ${app.color} rounded-full blur-[100px] opacity-10 group-hover:opacity-40 transition-opacity duration-500 pointer-events-none transform-gpu will-change-transform`}></div>
                   
                   <div className="relative z-10 flex-1">
                     <div className="flex justify-between items-start mb-6">

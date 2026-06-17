@@ -72,15 +72,31 @@ const XIcon = ({ className }: { className?: string }) => (
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zm-5.46-11.218c-3.613 0-6.554 2.941-6.554 6.554 0 1.154.301 2.279.873 3.268l-.927 3.385 3.461-.908a6.517 6.517 0 0 0 3.147.804h.003c3.611 0 6.552-2.941 6.552-6.554 0-1.75-.682-3.398-1.919-4.636a6.516 6.516 0 0 0-4.636-1.913zm0-1.895c4.656 0 8.448 3.792 8.448 8.449 0 2.222-.865 4.31-2.436 5.882-1.57 1.572-3.659 2.437-5.881 2.437h-.004c-1.474 0-2.918-.382-4.183-1.104l-4.733 1.242 1.264-4.615A8.406 8.406 0 0 1 3.564 12.01l.001-.001c0-4.656 3.792-8.448 8.448-8.448z" />
+    <path d="M12.031 0C5.385 0 0 5.385 0 12.031c0 2.112.551 4.17 1.594 5.968l-1.523 5.565 5.69-1.493a11.966 11.966 0 006.27 1.761c6.646 0 12.034-5.385 12.034-12.031S18.677 0 12.031 0zm6.183 17.387c-.255.72-.884 1.34-1.614 1.488-.584.119-1.332.186-2.585-.236-4.51-1.503-7.533-5.263-7.753-5.564-.22-.3-.1.185-1.85-2.65-.185-2.65.185 1.528 2.062 2.378 2.062.85 0 1.262-.39 1.772-.39s.51.524.73.524 1.353-.105 1.72-.255.454-3.567.873-4.137.98-.363 1.135-.363c.156 0 .397.028.583.085.185.057.426.114.58.426.24.496.824 2.013.895 2.155s.114.283.028.453-.142.227-.3.397c-.156.17-.326.38-.47.51-.156.128-.323.27-.142.582.185.312.823 1.353 1.763 2.195 1.216 1.09 2.228 1.43 2.54 1.58.312.142.496.114.68-.1.185-.213.794-.922.994-1.233.213-.312.41-.255.71-.142.284.114 1.8.85 2.11 1.006.313.156.526.227.597.355.085.128.085.737-.17 1.46z"/>
   </svg>
 );
 
-const socialLinks = [
-  { name: 'Instagram', icon: <Instagram className="w-4 h-4" />, url: '#instagram' },
-  { name: 'X / Twitter', icon: <XIcon className="w-4 h-4" />, url: '#twitter' },
-  { name: 'WhatsApp', icon: <WhatsAppIcon className="w-4 h-4" />, url: 'https://wa.me/919518463526' },
-  { name: 'GitHub', icon: <Github className="w-4 h-4" />, url: '#github' },
+const getSocialLinks = (isLight: boolean) => [
+  { 
+    name: 'Instagram', icon: <Instagram className="w-5 h-5 md:w-6 md:h-6" />, url: 'https://www.instagram.com/its_owner_official/?utm_source=ig_web_button_share_sheet',
+    hoverProps: { className: 'hover:text-[#E1306C] hover:border-[#E1306C]/40 hover:shadow-[0_0_25px_rgba(225,48,108,0.4)]' },
+    dotClass: 'bg-[#E1306C] shadow-[0_0_15px_#E1306C]'
+  },
+  { 
+    name: 'X / Twitter', icon: <XIcon className="w-5 h-5 md:w-6 md:h-6" />, url: '#twitter',
+    hoverProps: { className: isLight ? 'hover:text-black hover:border-black/40 hover:shadow-[0_0_25px_rgba(0,0,0,0.2)]' : 'hover:text-white hover:border-white/40 hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]' },
+    dotClass: isLight ? 'bg-black shadow-[0_0_15px_#000]' : 'bg-white shadow-[0_0_15px_#fff]'
+  },
+  { 
+    name: 'WhatsApp', icon: <WhatsAppIcon className="w-5 h-5 md:w-6 md:h-6" />, url: 'https://wa.me/918929395222',
+    hoverProps: { className: 'hover:text-[#25D366] hover:border-[#25D366]/40 hover:shadow-[0_0_25px_rgba(37,211,102,0.4)]' },
+    dotClass: 'bg-[#25D366] shadow-[0_0_15px_#25D366]'
+  },
+  { 
+    name: 'GitHub', icon: <Github className="w-5 h-5 md:w-6 md:h-6" />, url: '#github',
+    hoverProps: { className: isLight ? 'hover:text-black hover:border-black/40 hover:shadow-[0_0_25px_rgba(0,0,0,0.2)]' : 'hover:text-white hover:border-white/40 hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]' },
+    dotClass: isLight ? 'bg-black shadow-[0_0_15px_#000]' : 'bg-white shadow-[0_0_15px_#fff]'
+  },
 ];
 
 // --- 3D WEBGL COMPONENT ---
@@ -487,14 +503,14 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex gap-6 md:gap-8">
-                      {socialLinks.map((link, idx) => (
+                      {getSocialLinks(isLight).map((link, idx) => (
                           <motion.a 
-                              key={idx} href={link.url}
+                              key={idx} href={link.url} target="_blank" rel="noopener noreferrer"
                               whileHover={{ y: -4, scale: 1.1 }} whileTap={{ scale: 0.9 }} transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                              className={`transition-colors group relative border rounded-full p-3.5 ${isLight ? 'text-zinc-500 bg-white border-black/5 hover:bg-zinc-50 hover:text-[#ff007b] hover:border-[#ff007b]/30 shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'text-zinc-400 bg-black border-white/5 hover:bg-[#0a0a0a] hover:text-[#ff007b] hover:border-[#ff007b]/50 hover:shadow-[0_0_20px_rgba(255,0,123,0.3)]'}`}
+                              className={`transition-all duration-300 group relative border rounded-full p-4 md:p-5 ${isLight ? 'text-zinc-500 bg-white border-black/5 shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'text-zinc-400 bg-black border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.4)]'} ${link.hoverProps.className}`}
                           >
                               <motion.div className="group-hover:rotate-12 transition-transform duration-300">{link.icon}</motion.div>
-                              <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[#ff007b] opacity-0 group-hover:opacity-100 rounded-full shadow-[0_0_15px_#ff007b] transition-opacity duration-300" />
+                              <span className={`absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${link.dotClass}`} />
                           </motion.a>
                       ))}
                   </div>

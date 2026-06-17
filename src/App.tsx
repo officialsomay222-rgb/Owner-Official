@@ -18,6 +18,7 @@ const myApps = [
     fullDesc: 'Loki X Prime operates at the absolute edge of modern web rendering. By bypassing standard design conventions, it introduces a fluid, zero-latency architectural aesthetic. Engineered deeply with physics-based motion and hardware-accelerated gradients, this platform is a masterclass in God-Level UX.',
     tag: 'Web Platform', 
     icon: <Globe className="w-4 h-4" />,
+    image: 'https://i.ibb.co/27vjwr6f/Screenshot-20260617-125714-Loki-Prime-X.jpg',
     url: 'https://loki-x-prime.vercel.app/',
     number: '01',
     iconColor: 'text-[#ff00c8]',
@@ -34,6 +35,7 @@ const myApps = [
     fullDesc: 'A high-throughput algorithmic dashboard designed exclusively for commerce. Commerce Prime strips away the bloated interfaces of traditional systems, offering raw, unadulterated speed. Financial data flows seamlessly through encrypted visual channels with zero visual stutter.',
     tag: 'Web Utility', 
     icon: <Calculator className="w-4 h-4" />,
+    image: 'https://i.ibb.co/LdwsZdj2/Screenshot-20260617-125701-Chrome.jpg',
     url: 'https://commerce-prime.vercel.app/',
     number: '02',
     iconColor: 'text-[#00ffd5]',
@@ -62,15 +64,28 @@ const myApps = [
   }
 ];
 
+const XIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 24.5H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
+const WhatsAppIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zm-5.46-11.218c-3.613 0-6.554 2.941-6.554 6.554 0 1.154.301 2.279.873 3.268l-.927 3.385 3.461-.908a6.517 6.517 0 0 0 3.147.804h.003c3.611 0 6.552-2.941 6.552-6.554 0-1.75-.682-3.398-1.919-4.636a6.516 6.516 0 0 0-4.636-1.913zm0-1.895c4.656 0 8.448 3.792 8.448 8.449 0 2.222-.865 4.31-2.436 5.882-1.57 1.572-3.659 2.437-5.881 2.437h-.004c-1.474 0-2.918-.382-4.183-1.104l-4.733 1.242 1.264-4.615A8.406 8.406 0 0 1 3.564 12.01l.001-.001c0-4.656 3.792-8.448 8.448-8.448z" />
+  </svg>
+);
+
 const socialLinks = [
   { name: 'Instagram', icon: <Instagram className="w-4 h-4" />, url: '#instagram' },
-  { name: 'X / Twitter', icon: <Twitter className="w-4 h-4" />, url: '#twitter' },
-  { name: 'YouTube', icon: <Youtube className="w-4 h-4" />, url: '#youtube' },
+  { name: 'X / Twitter', icon: <XIcon className="w-4 h-4" />, url: '#twitter' },
+  { name: 'WhatsApp', icon: <WhatsAppIcon className="w-4 h-4" />, url: 'https://wa.me/919518463526' },
   { name: 'GitHub', icon: <Github className="w-4 h-4" />, url: '#github' },
 ];
 
 // --- 3D WEBGL COMPONENT ---
 function CyberCore({ isLight }: { isLight: boolean }) {
+  const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const wireRef = useRef<THREE.Mesh>(null);
   const innerFlowRef = useRef<THREE.Mesh>(null);
@@ -93,9 +108,9 @@ function CyberCore({ isLight }: { isLight: boolean }) {
       }
     }
     const infCurve = new InfinityCurve(2.4); // optimized size for all devices
-    const tGeom = new THREE.TubeGeometry(infCurve, 200, 0.28, 32, true);
-    const wGeom = new THREE.TubeGeometry(infCurve, 100, 0.38, 12, true);
-    const iGeom = new THREE.TubeGeometry(infCurve, 200, 0.1, 16, true);
+    const tGeom = new THREE.TubeGeometry(infCurve, 100, 0.28, 24, true);
+    const wGeom = new THREE.TubeGeometry(infCurve, 64, 0.38, 8, true);
+    const iGeom = new THREE.TubeGeometry(infCurve, 100, 0.1, 12, true);
     
     const canvas = document.createElement('canvas');
     canvas.width = 1024;
@@ -121,7 +136,8 @@ function CyberCore({ isLight }: { isLight: boolean }) {
     return { tubeGeom: tGeom, wireGeom: wGeom, innerGeom: iGeom, flowTex: tex, flowTexReverse: texRev };
   }, []);
 
-  useFrame((state) => {
+  // Use framer-motion approach or manual reading of scroll to drive 3D changes smoothly
+  useFrame((state, delta) => {
     const time = state.clock.getElapsedTime();
     // Flow the texture inside the tube (slower)
     flowTex.offset.x = -time * 0.15;
@@ -139,17 +155,35 @@ function CyberCore({ isLight }: { isLight: boolean }) {
       innerFlowRef.current.rotation.y = time * 0.15;
       innerFlowRef.current.rotation.x = Math.sin(time * 0.3) * 0.1;
     }
+
+    // Scroll calculations for group scale and rotation
+    if (groupRef.current) {
+      const scrollY = window.scrollY;
+      const maxScroll = Math.max(document.body.scrollHeight - window.innerHeight, 1);
+      const scrollProgress = Math.min(scrollY / maxScroll, 1);
+
+      // Smoothly interpolate current values towards target values using lerp
+      const targetScale = 0.9 + scrollProgress * 0.6; // Expands slightly as you scroll down
+      groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
+
+      const targetRotationZ = scrollProgress * Math.PI * 0.5; // Rotate sideways
+      const targetRotationX = scrollProgress * 1.5; // Pitch rotation
+      
+      // We manually lerp rotation. x and z
+      groupRef.current.rotation.z += (targetRotationZ - groupRef.current.rotation.z) * 0.05;
+      groupRef.current.rotation.x += (targetRotationX - groupRef.current.rotation.x) * 0.05;
+    }
   });
 
   return (
-    <group scale={0.9}>
+    <group ref={groupRef} scale={0.9}>
       <ambientLight intensity={isLight ? 0.8 : 0.2} />
       <directionalLight position={[10, 10, 5]} intensity={isLight ? 2 : 4} color="#4285F4" />
       <directionalLight position={[-10, -10, -5]} intensity={isLight ? 2 : 4} color="#EA4335" />
       <directionalLight position={[0, -10, 0]} intensity={isLight ? 1.5 : 3} color="#FBBC05" />
       <directionalLight position={[0, 10, -5]} intensity={isLight ? 1.5 : 3} color="#34A853" />
       
-      {!isLight && <Stars radius={100} depth={50} count={5000} factor={3} saturation={1} fade speed={1.5} />}
+      {!isLight && <Stars radius={100} depth={50} count={1000} factor={4} saturation={1} fade speed={1} />}
       
       <Float speed={2} rotationIntensity={0.5} floatIntensity={1}>
         
@@ -238,19 +272,25 @@ function ProjectCard({ app, index, onClick, isLight }: { app: any, index: number
              </div>
           </motion.div>
 
-          <motion.div layoutId={`project-image-${app.name}`} className={`w-full h-24 mb-6 rounded-lg border relative overflow-hidden flex flex-col z-10 group-hover:-translate-y-1 transition-transform duration-500 ${isLight ? 'bg-zinc-100 border-black/5' : 'bg-black border-white/5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]'}`}>
-             <div className={`w-full h-4 border-b flex items-center px-2 gap-1 backdrop-blur-md ${isLight ? 'bg-white/40 border-black/5' : 'bg-white/[0.03] border-white/5'}`}>
-               <div className="w-1 h-1 rounded-full bg-[#ff0055]/50 group-hover:bg-[#ff0055] transition-colors" />
-               <div className="w-1 h-1 rounded-full bg-[#ffea00]/50 group-hover:bg-[#ffea00] transition-colors" />
-               <div className="w-1 h-1 rounded-full bg-[#00d5ff]/50 group-hover:bg-[#00d5ff] transition-colors" />
-             </div>
-             <div className={`flex-1 relative overflow-hidden ${isLight ? 'bg-white' : 'bg-[#030303]'}`}>
-                <div className={`absolute inset-0 opacity-40 group-hover:opacity-80 transition-opacity duration-700 bg-gradient-to-tr ${app.gradient} ${isLight ? 'mix-blend-multiply' : 'mix-blend-screen'} scale-150 rotate-12 blur-xl`} />
-                <div className="w-full h-full p-3 flex flex-col gap-2 relative z-10">
-                  <div className={`w-1/2 h-1.5 rounded-full ${isLight ? 'bg-black/10' : 'bg-white/20'}`} />
-                  <div className={`w-1/3 h-1.5 rounded-full ${isLight ? 'bg-black/5' : 'bg-white/10'}`} />
+          <motion.div layoutId={`project-image-${app.name}`} className={`w-full aspect-[4/5] md:aspect-[3/4] object-cover mb-8 rounded-2xl border relative overflow-hidden flex items-center justify-center z-10 group-hover:-translate-y-2 transition-transform duration-500 shadow-xl p-4 md:p-6 lg:p-8 ${isLight ? 'bg-[#f0f0f0] border-black/5' : 'bg-[#111] border-white/5'}`}>
+             <div className={`absolute inset-0 opacity-40 group-hover:opacity-80 transition-opacity duration-700 bg-gradient-to-tr ${app.gradient} ${isLight ? 'mix-blend-multiply' : 'mix-blend-screen'} scale-150 rotate-12 blur-2xl radial-gradient z-0`} />
+             
+             {app.image ? (
+                <div className={`h-full aspect-[9/20] rounded-[1.2rem] border relative z-10 flex flex-col overflow-hidden shadow-2xl transition-all duration-500 group-hover:scale-[1.02] ${isLight ? 'border-black/10 bg-white' : 'border-white/10 bg-black'}`}>
+                   <div className="flex-1 w-full relative overflow-hidden bg-black rounded-[1rem]">
+                     <img src={app.image} alt={app.name} className="w-full h-full object-cover object-top opacity-95 group-hover:opacity-100 transition-opacity duration-700" />
+                     <div className={`absolute inset-0 pointer-events-none transition-colors duration-500 ${isLight ? 'shadow-[inset_0_0_15px_rgba(0,0,0,0.1)]' : 'shadow-[inset_0_0_30px_rgba(0,0,0,0.6)]'}`} />
+                   </div>
                 </div>
-             </div>
+             ) : (
+                <div className={`h-full aspect-[9/20] rounded-[1.2rem] border relative z-10 flex flex-col overflow-hidden shadow-2xl ${isLight ? 'border-black/10 bg-white/50 backdrop-blur-md' : 'border-white/10 bg-black/50 backdrop-blur-md'}`}>
+                   <div className="w-full h-full p-4 flex flex-col gap-3 relative z-10 pt-6">
+                     <div className={`w-3/4 h-2 rounded-full ${isLight ? 'bg-black/10' : 'bg-white/20'}`} />
+                     <div className={`w-1/2 h-2 rounded-full ${isLight ? 'bg-black/5' : 'bg-white/10'}`} />
+                     <div className={`flex-1 w-full rounded-lg mt-2 border ${isLight ? 'bg-black/5 border-black/10' : 'bg-white/5 border-white/10'}`} />
+                   </div>
+                </div>
+             )}
           </motion.div>
 
           <div className="relative z-10 mt-auto">
@@ -285,6 +325,12 @@ export default function App() {
 
   return (
     <div className={`min-h-screen font-sans selection:bg-[#00d5ff]/30 relative overflow-hidden transition-colors duration-700 ${isLight ? 'bg-[#f4f4f5] selection:text-zinc-900' : 'bg-[#000] selection:text-white'}`}>
+      
+      {/* --- NOISE TEXTURE LAYER --- */}
+      <div 
+        className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none mix-blend-overlay"
+        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}
+      />
       
       {/* --- 3D WEBGL LAYER (Bottom) --- */}
       <motion.div style={{ y: canvasY, opacity: canvasOpacity }} className="fixed inset-0 z-0 pointer-events-none">
@@ -337,20 +383,17 @@ export default function App() {
         <section className="min-h-screen flex flex-col items-center justify-center text-center w-full px-4 pt-32 overflow-hidden relative pointer-events-none">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.5, ease: [0.16,1,0.3,1] }} className="z-10 flex flex-col items-center">
             
-            <div className="mb-8 flex items-center justify-center gap-3">
-              <TerminalSquare className="w-4 h-4 text-[#00d5ff] drop-shadow-[0_0_8px_#00d5ff] animate-pulse" />
-              <span className="text-[10px] md:text-[11px] uppercase tracking-[0.5em] font-semibold text-[#00d5ff] drop-shadow-[0_0_8px_rgba(0,213,255,0.6)]">
-                WebGL Environment Active
-              </span>
-            </div>
-
-            <div className="relative pointer-events-auto cursor-default group">
-               <h1 className={`text-[18vw] sm:text-[15vw] md:text-[13vw] font-display font-black leading-[1] tracking-tighter text-transparent bg-clip-text bg-gradient-to-b drop-shadow-[0_0_40px_rgba(255,255,255,0.1)] group-hover:drop-shadow-[0_0_60px_rgba(0,213,255,0.3)] transition-all duration-700 ${isLight ? 'from-zinc-900 via-zinc-500 to-zinc-300 drop-shadow-[0_20px_40px_rgba(0,0,0,0.1)]' : 'from-white via-zinc-300 to-zinc-800'}`}>
-                 SOMAY
+            <div className="relative pointer-events-auto cursor-default group flex flex-col items-center">
+               <div className={`absolute -inset-10 blur-[60px] opacity-0 group-hover:opacity-30 transition-opacity duration-1000 bg-gradient-to-r from-[#4285F4] via-[#EA4335] to-[#FBBC05] -z-10`} />
+               <h1 className={`relative text-[18vw] sm:text-[15vw] md:text-[13vw] font-display font-black leading-[0.9] tracking-tighter text-transparent bg-clip-text bg-gradient-to-b drop-shadow-[0_0_40px_rgba(255,255,255,0.1)] group-hover:drop-shadow-[0_0_60px_rgba(255,255,255,0.4)] transition-all duration-700 ${isLight ? 'from-zinc-900 via-zinc-600 to-zinc-400 drop-shadow-[0_20px_40px_rgba(0,0,0,0.1)] group-hover:from-black group-hover:to-zinc-600' : 'from-white via-zinc-300 to-zinc-800 group-hover:from-white group-hover:to-zinc-400'}`}>
+                 SOMAY<span className={`${isLight ? 'text-black' : 'text-white'}`}>.</span>
                </h1>
+               <p className={`mt-6 text-sm md:text-base tracking-[0.3em] font-medium uppercase transition-colors duration-500 ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                 Design ✦ Develop ✦ Elevate
+               </p>
             </div>
 
-            <motion.div className="mt-4 z-10 relative group cursor-default pointer-events-auto">
+            <motion.div className="mt-12 z-10 relative group cursor-default pointer-events-auto">
                 <div className={`absolute -inset-1.5 bg-gradient-to-r from-[#00d5ff] via-[#ff007b] to-[#00d5ff] rounded-full blur-[16px] transition duration-1000 -z-10 bg-[length:200%_auto] animate-[rgb-sweep_4s_linear_infinite] ${isLight ? 'opacity-20 group-hover:opacity-40' : 'opacity-40 group-hover:opacity-80'}`} />
                 <div className={`px-12 py-3.5 flex items-center justify-center z-10 border rounded-full backdrop-blur-3xl transition-colors duration-500 ${isLight ? 'bg-white/80 border-black/10 shadow-[inset_0_1px_1px_rgba(0,0,0,0.1)]' : 'bg-[#000]/80 border-white/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]'}`}>
                     <h2 className={`text-[11px] md:text-xs font-sans font-bold tracking-[0.8em] uppercase whitespace-nowrap transition-colors duration-500 ${isLight ? 'text-zinc-900 drop-shadow-[0_0_10px_rgba(0,0,0,0.1)]' : 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.6)]'}`}>
@@ -360,6 +403,17 @@ export default function App() {
             </motion.div>
 
             <div className={`w-[1px] h-24 md:h-32 bg-gradient-to-b from-[#00d5ff] to-transparent mt-16 opacity-60 transition-colors duration-700 ${isLight ? 'shadow-none' : 'shadow-[0_0_15px_#00d5ff]'}`} />
+          </motion.div>
+          
+          {/* Scroll instruction text */}
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 2, duration: 1 }}
+            className={`absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 pointer-events-auto ${isLight ? 'text-zinc-400' : 'text-zinc-500'}`}
+          >
+            <span className="text-[9px] uppercase tracking-[0.4em] font-semibold">Scroll to explore</span>
+            <div className="w-[1px] h-10 bg-gradient-to-b from-current to-transparent animate-pulse" />
           </motion.div>
         </section>
 
@@ -473,21 +527,27 @@ export default function App() {
               </button>
 
               {/* Modal Left Column */}
-              <div className={`w-full h-[40vh] md:h-full md:w-[45%] p-6 sm:p-10 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r relative overflow-hidden shrink-0 transition-colors duration-500 ${isLight ? 'bg-zinc-50 border-black/5' : 'bg-[#000] border-white/5'}`}>
+              <div className={`w-full h-[50vh] md:h-full md:w-[45%] p-6 sm:p-10 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r relative overflow-hidden shrink-0 transition-colors duration-500 ${isLight ? 'bg-zinc-50 border-black/5' : 'bg-[#000] border-white/5'}`}>
                  <motion.div layoutId={`project-header-${activeApp.name}`} className="w-full flex justify-between absolute top-6 md:top-8 px-6 md:px-8 left-0 z-20">
                     <span className={`text-3xl md:text-5xl font-display font-black opacity-10 tracking-widest ${isLight ? 'text-black' : 'text-white'}`}>{activeApp.number}</span>
                  </motion.div>
-                 <motion.div layoutId={`project-image-${activeApp.name}`} className={`w-full max-w-[300px] md:max-w-none aspect-square mt-4 md:mt-8 rounded-2xl border relative overflow-hidden flex items-center justify-center shadow-2xl transition-colors duration-500 ${isLight ? 'bg-white border-black/5' : 'bg-[#050505] border-white/10'}`}>
-                    <div className={`absolute inset-0 opacity-40 bg-gradient-to-br ${activeApp.gradient} scale-[2] rotate-[25deg] blur-2xl animate-[spin_10s_linear_infinite] ${isLight ? 'mix-blend-multiply' : 'mix-blend-screen'}`} />
-                    <div className={`w-3/4 h-3/4 rounded-xl border backdrop-blur-xl p-5 flex flex-col gap-4 relative z-10 transition-colors duration-500 ${isLight ? 'bg-white/60 border-black/10 shadow-[0_20px_40px_rgba(0,0,0,0.05)]' : 'bg-black/60 border-white/20 shadow-[0_20px_40px_rgba(0,0,0,0.5)]'}`}>
-                      <div className={`w-full h-4 flex items-center px-3 gap-1.5 rounded-md ${isLight ? 'bg-black/5' : 'bg-white/10'}`}>
-                        <div className="w-2 h-2 rounded-full bg-red-500/80 shadow-[0_0_5px_red]" />
-                        <div className="w-2 h-2 rounded-full bg-yellow-500/80 shadow-[0_0_5px_yellow]" />
-                        <div className="w-2 h-2 rounded-full bg-green-500/80 shadow-[0_0_5px_green]" />
+                 <motion.div layoutId={`project-image-${activeApp.name}`} className={`w-full max-w-[300px] md:max-w-none aspect-[4/5] md:h-[80%] mt-8 mx-auto rounded-[2.5rem] border relative overflow-hidden flex items-center justify-center shadow-2xl transition-colors duration-500 ${isLight ? 'bg-zinc-100 border-black/5' : 'bg-[#111] border-white/10'}`}>
+                    <div className={`absolute inset-0 opacity-40 bg-gradient-to-br ${activeApp.gradient} scale-[2] rotate-[25deg] blur-3xl animate-[spin_10s_linear_infinite] ${isLight ? 'mix-blend-multiply' : 'mix-blend-screen'} z-0`} />
+                    
+                    {activeApp.image ? (
+                        <div className={`h-[90%] aspect-[9/20] rounded-[1.2rem] border relative z-10 transition-colors duration-500 flex flex-col ${isLight ? 'bg-white border-black/10 shadow-[0_20px_40px_rgba(0,0,0,0.1)]' : 'bg-black border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)]'}`}>
+                             <div className="flex-1 w-full relative overflow-hidden bg-[#050505] rounded-[1rem]">
+                               <img src={activeApp.image} alt={activeApp.name} className={`w-full h-full object-cover object-top filter contrast-[1.05] ${isLight ? '' : 'brightness-[0.85]'}`} />
+                               <div className={`absolute inset-0 pointer-events-none transition-colors duration-500 shadow-[inset_0_0_40px_rgba(0,0,0,0.5)] ${isLight ? 'opacity-0' : 'opacity-100'}`} />
+                             </div>
+                        </div>
+                    ) : (
+                      <div className={`h-[90%] aspect-[9/20] rounded-[1.2rem] border backdrop-blur-xl p-6 flex flex-col gap-6 relative z-10 transition-colors duration-500 pt-8 ${isLight ? 'bg-white/60 border-black/10 shadow-[0_20px_40px_rgba(0,0,0,0.05)]' : 'bg-black/60 border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.6)]'}`}>
+                        <div className={`w-3/4 h-2 rounded-full ${isLight ? 'bg-black/10' : 'bg-white/20'}`} />
+                        <div className={`flex-1 rounded-xl border ${isLight ? 'border-black/5 bg-black/[0.02]' : 'border-white/5 bg-white/[0.03]'}`} />
+                        <div className={`h-1/3 rounded-xl border ${isLight ? 'border-black/5 bg-black/[0.02]' : 'border-white/5 bg-white/[0.03]'}`} />
                       </div>
-                      <div className={`flex-1 rounded border ${isLight ? 'border-black/5 bg-black/[0.02]' : 'border-white/5 bg-white/[0.03]'}`} />
-                      <div className={`h-1/3 rounded border ${isLight ? 'border-black/5 bg-black/[0.02]' : 'border-white/5 bg-white/[0.03]'}`} />
-                    </div>
+                    )}
                  </motion.div>
               </div>
 

@@ -267,7 +267,7 @@ function ProjectCard({ app, index, onClick, isLight }: { app: any, index: number
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
       transition={{ duration: 0.8, delay: index * 0.1, ease: [0.16, 1, 0.3, 1] }}
-      className="hw-accel cursor-pointer group relative pointer-events-auto"
+      className="hw-accel cursor-pointer group relative pointer-events-auto transform-gpu will-change-transform will-change-opacity"
       onClick={onClick}
       onMouseMove={handleMouseMove}
     >
@@ -349,8 +349,8 @@ export default function App() {
       />
       
       {/* --- 3D WEBGL LAYER (Bottom) --- */}
-      <motion.div style={{ y: canvasY, opacity: canvasOpacity }} className="fixed inset-0 z-0 pointer-events-none">
-        <Canvas camera={{ position: [0, 0, 8], fov: 45 }} dpr={[1, 2]}>
+      <motion.div style={{ y: canvasY, opacity: canvasOpacity }} className="fixed inset-0 z-0 pointer-events-none transform-gpu will-change-transform will-change-opacity">
+        <Canvas camera={{ position: [0, 0, 8], fov: 45 }} dpr={[1, 1.5]}>
            <CyberCore isLight={isLight} />
         </Canvas>
       </motion.div>
@@ -359,8 +359,8 @@ export default function App() {
       <div className="relative z-10 w-full flex flex-col items-center pointer-events-none">
         
         {/* NAV */}
-        <nav className={`fixed top-0 w-full z-50 px-6 py-6 md:px-10 md:py-8 flex justify-between items-center transition-colors duration-700 pointer-events-none hw-accel ${isLight ? 'bg-gradient-to-b from-[#f4f4f5] via-[#f4f4f5]/90 to-transparent' : 'bg-gradient-to-b from-[#000] via-[#000]/80 to-transparent'}`}>
-          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, ease: "easeOut" }} className="pointer-events-auto">
+        <nav className={`fixed top-0 w-full z-50 px-6 py-6 md:px-10 md:py-8 flex justify-between items-center transition-colors duration-700 pointer-events-none hw-accel transform-gpu ${isLight ? 'bg-gradient-to-b from-[#f4f4f5] via-[#f4f4f5]/90 to-transparent' : 'bg-gradient-to-b from-[#000] via-[#000]/80 to-transparent'}`}>
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, ease: "easeOut" }} className="pointer-events-auto transform-gpu will-change-transform will-change-opacity">
             <span className={`font-display font-black text-[9px] md:text-xs uppercase flex items-center gap-3 px-5 py-2.5 md:py-3 relative z-10 w-full h-full tracking-[0.2em] rounded-full backdrop-blur-xl border transition-colors duration-700 ${isLight ? 'bg-white/80 border-black/5 text-zinc-900 shadow-[0_4px_20px_rgba(0,0,0,0.05)]' : 'bg-[#020202]/90 border-white/5 text-white god-border my-shadow shadow-[0_0_25px_rgba(0,213,255,0.2)]'}`}>
                <Diamond className="w-3 h-3 fill-[#00ffd5] animate-[pulse_2s_ease-in-out_infinite] drop-shadow-[0_0_8px_#00ffd5]" />
                <span className="drop-shadow-sm">OWNER_OFFICIAL</span>
@@ -397,7 +397,7 @@ export default function App() {
 
         {/* HERO SECTION */}
         <section className="min-h-screen flex flex-col items-center justify-center text-center w-full px-4 pt-32 overflow-hidden relative pointer-events-none">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.5, ease: [0.16,1,0.3,1] }} className="z-10 flex flex-col items-center">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.5, ease: [0.16,1,0.3,1] }} className="z-10 flex flex-col items-center transform-gpu will-change-transform will-change-opacity">
             
             <div className="relative pointer-events-auto cursor-default group flex flex-col items-center">
                <div className={`absolute -inset-10 blur-[60px] opacity-0 group-hover:opacity-30 transition-opacity duration-1000 bg-gradient-to-r from-[#4285F4] via-[#EA4335] to-[#FBBC05] -z-10`} />
@@ -426,7 +426,7 @@ export default function App() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 2, duration: 1 }}
-            className={`absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 pointer-events-auto ${isLight ? 'text-zinc-400' : 'text-zinc-500'}`}
+            className={`absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 pointer-events-auto transform-gpu will-change-transform will-change-opacity ${isLight ? 'text-zinc-400' : 'text-zinc-500'}`}
           >
             <span className="text-[9px] uppercase tracking-[0.4em] font-semibold">Scroll to explore</span>
             <div className="w-[1px] h-10 bg-gradient-to-b from-current to-transparent animate-pulse" />
@@ -437,7 +437,7 @@ export default function App() {
         <section id="work" className="w-full max-w-[1400px] mx-auto py-32 px-6 md:px-16 lg:px-20 relative z-10 pointer-events-none">
           <motion.div 
             initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.8 }}
-            className="flex items-center gap-6 mb-16 pointer-events-auto"
+            className="flex items-center gap-6 mb-16 pointer-events-auto transform-gpu will-change-transform will-change-opacity"
           >
              <div className="w-12 h-1 bg-gradient-to-r from-[#ff007b] to-transparent shadow-[0_0_20px_#ff007b]" />
              <h2 className={`text-3xl md:text-5xl font-display font-black uppercase tracking-tighter transition-colors duration-500 ${isLight ? 'text-zinc-900 drop-shadow-sm' : 'text-white drop-shadow-xl'}`}>Live Assets</h2>
@@ -460,8 +460,8 @@ export default function App() {
                     Establish Connection
                   </span>
                   
-                  <div className="flex flex-col items-center text-center mt-2 w-full max-w-[95vw] md:max-w-[65vw] relative z-10">
-                    <svg viewBox="0 0 1200 450" className="w-full h-auto overflow-visible select-none pointer-events-none group-hover:scale-[1.02] transition-transform duration-1000 cubic-bezier(0.16,1,0.3,1)">
+                  <div className="flex flex-col items-center text-center mt-2 w-full max-w-[95vw] md:max-w-[65vw] relative z-10 transform-gpu will-change-transform">
+                    <svg viewBox="0 0 1200 450" className="w-full h-auto overflow-visible select-none pointer-events-none group-hover:scale-[1.02] transition-transform duration-1000 cubic-bezier(0.16,1,0.3,1) transform-gpu will-change-transform">
                       <defs>
                         <linearGradient id="fluid-glow" x1="0%" y1="0%" x2="200%" y2="0%">
                           <stop offset="0%" stopColor="#00d5ff" />
@@ -525,13 +525,13 @@ export default function App() {
         {activeApp && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-6 lg:p-12 pointer-events-auto"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-6 lg:p-12 pointer-events-auto transform-gpu will-change-opacity"
           >
-            <div className={`absolute inset-0 backdrop-blur-3xl transition-colors duration-500 ${isLight ? 'bg-zinc-100/80' : 'bg-[#000]/90'}`} onClick={() => setActiveApp(null)} />
+            <div className={`absolute inset-0 backdrop-blur-3xl transition-colors duration-500 transform-gpu ${isLight ? 'bg-zinc-100/80' : 'bg-[#000]/90'}`} onClick={() => setActiveApp(null)} />
             
             <motion.div 
               layoutId={`project-container-${activeApp.name}`}
-              className={`w-full h-full md:h-[90vh] md:max-h-[900px] md:max-w-6xl md:border overflow-hidden relative z-10 flex flex-col md:flex-row md:rounded-3xl shadow-none transition-colors duration-500 ${isLight ? 'bg-white border-black/10 md:shadow-[0_20px_60px_rgba(0,0,0,0.1)]' : 'bg-[#030303] border-white/10 md:shadow-[0_0_50px_rgba(0,213,255,0.15)]'}`}
+              className={`w-full h-full md:h-[90vh] md:max-h-[900px] md:max-w-6xl md:border overflow-hidden relative z-10 flex flex-col md:flex-row md:rounded-3xl shadow-none transition-colors duration-500 transform-gpu will-change-transform ${isLight ? 'bg-white border-black/10 md:shadow-[0_20px_60px_rgba(0,0,0,0.1)]' : 'bg-[#030303] border-white/10 md:shadow-[0_0_50px_rgba(0,213,255,0.15)]'}`}
             >
               <div className={`absolute top-0 left-0 w-full md:w-1/2 h-64 md:h-full bg-gradient-to-br ${activeApp.gradient} opacity-10 mix-blend-screen pointer-events-none`} />
 

@@ -88,7 +88,7 @@ const getSocialLinks = (isLight: boolean) => [
     dotClass: isLight ? 'bg-black shadow-[0_0_15px_#000]' : 'bg-white shadow-[0_0_15px_#fff]'
   },
   { 
-    name: 'WhatsApp', icon: <WhatsAppIcon className="w-5 h-5 md:w-6 md:h-6" />, url: 'https://wa.me/918929395222',
+    name: 'WhatsApp', icon: <WhatsAppIcon className="w-5 h-5 md:w-6 md:h-6" />, url: 'https://wa.me/919034184333',
     hoverProps: { className: 'hover:text-[#25D366] hover:border-[#25D366]/40 hover:shadow-[0_0_25px_rgba(37,211,102,0.4)]' },
     dotClass: 'bg-[#25D366] shadow-[0_0_15px_#25D366]'
   },

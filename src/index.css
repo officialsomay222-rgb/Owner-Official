@@ -7,6 +7,12 @@
   --font-mono: "JetBrains Mono", monospace;
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+}
+
 body {
   background-color: #000;
   color: #fff;
@@ -14,11 +20,15 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
+  touch-action: pan-y;
 }
 
 .hw-accel {
-  transform: translateZ(0);
-  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform;
 }
 
 .god-border {
@@ -40,6 +50,12 @@ body {
   opacity: 1;
 }
 
+/* Pause continuous background gradient sweep on low-end / lite mode to save battery & GPU */
+.lite-mode .god-border::before {
+  animation: none;
+  background-size: 100% 100%;
+}
+
 @keyframes rgb-sweep {
   0% { background-position: 100% 0; }
   100% { background-position: -200% 0; }
@@ -51,9 +67,44 @@ body {
   animation: fluid-stroke-flow 4s linear infinite;
 }
 
+.lite-mode .fluid-stroke-text {
+  animation-duration: 8s;
+}
+
 @keyframes fluid-stroke-flow {
   100% { stroke-dashoffset: -160; }
 }
+
+@keyframes orbit-cw {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(360deg); }
+}
+
+@keyframes orbit-ccw {
+  0% { transform: translate3d(0, 0, 0) rotate(360deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.85); }
+  50% { opacity: 0.95; transform: scale(1.15); }
+}
+
+.animate-orbit-cw {
+  animation: orbit-cw 44s linear infinite;
+  will-change: transform;
+}
+
+.animate-orbit-ccw {
+  animation: orbit-ccw 56s linear infinite;
+  will-change: transform;
+}
+
+.scene-3d {
+  perspective: 1400px;
+  transform-style: preserve-3d;
+}
+
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
@@ -69,19 +120,12 @@ body {
   background: rgba(0, 213, 255, 0.5);
 }
 
-.meteor {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 2px;
-  height: 100px;
-  background: linear-gradient(to bottom, rgba(255,255,255,1), transparent);
-  transform: rotate(-45deg);
-  opacity: 0;
-  animation: meteor-fall 4s linear infinite;
+/* Safe area padding for notched / Dynamic Island / gesture bar flagship phones */
+.pb-safe {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
-@keyframes meteor-fall {
-  0% { transform: rotate(-45deg) translateY(-200px); opacity: 1; }
-  20% { opacity: 0; transform: rotate(-45deg) translateY(600px); }
-  100% { opacity: 0; }
+.pt-safe {
+  padding-top: max(1rem, env(safe-area-inset-top));
 }
+
+

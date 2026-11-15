@@ -50,7 +50,7 @@
         "apkUrl": {
           "type": "string",
           "maxLength": 1000,
-          "description": "External direct download URL or internal chunked indicator"
+          "description": "External direct download URL or internal chunked prefix"
         },
         "image": {
           "type": "string",
@@ -86,11 +86,22 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "description": "UID of the admin who published the APK"
+          "description": "UID or admin marker of the publisher"
+        },
+        "gateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Reference ID of the atomic write-only UploadGate verifying passkey authorization"
         },
         "published": {
           "type": "boolean",
-          "description": "Whether the app is publicly visible on the main showcase"
+          "description": "Whether the app is publicly visible in the Apps section"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Soft-delete flag used to hide archived releases"
         },
         "createdAt": {
           "type": "string",
@@ -119,7 +130,9 @@
         "features",
         "tech",
         "ownerId",
+        "gateId",
         "published",
+        "archived",
         "createdAt",
         "updatedAt"
       ]
@@ -151,7 +164,14 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$",
-          "description": "Admin owner UID"
+          "description": "Admin owner UID or passkey marker"
+        },
+        "gateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Reference ID of the atomic write-only UploadGate verifying passkey authorization"
         },
         "createdAt": {
           "type": "string",
@@ -164,6 +184,38 @@
         "index",
         "data",
         "ownerId",
+        "gateId",
+        "createdAt"
+      ]
+    },
+    "UploadGate": {
+      "title": "UploadGate",
+      "description": "Write-only atomic authorization gate document verified via getAfter() during batch writes",
+      "type": "object",
+      "properties": {
+        "passkeyHash": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex digest of the admin upload passkey"
+        },
+        "appId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Target ApkApp document ID authorized by this batch gate"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp matching request.time"
+        }
+      },
+      "required": [
+        "passkeyHash",
+        "appId",
         "createdAt"
       ]
     }
@@ -180,6 +232,12 @@
         "$ref": "#/entities/ApkChunk"
       },
       "description": "Binary base64 chunks for uploaded APK files associated with an ApkApp"
+    },
+    "/upload_gates/{gateId}": {
+      "schema": {
+        "$ref": "#/entities/UploadGate"
+      },
+      "description": "Write-only passkey verification gates created atomically alongside ApkApp and ApkChunk writes"
     }
   }
 }

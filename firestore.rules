@@ -35,19 +35,33 @@ service cloud.firestore {
       );
     }
 
+    function isValidPasskeyHash(hash) {
+      return hash is string &&
+        hash.size() == 64 &&
+        hash == 'adaa118260b981ae2f48ffd08e5fc23da0aeddf7ff9c9979cdff54a0134feed6';
+    }
+
+    function hasValidPasskeyGate(appId, gateId) {
+      return isValidId(gateId) &&
+        existsAfter(/databases/$(database)/documents/upload_gates/$(gateId)) &&
+        getAfter(/databases/$(database)/documents/upload_gates/$(gateId)).data.appId == appId &&
+        isValidPasskeyHash(getAfter(/databases/$(database)/documents/upload_gates/$(gateId)).data.passkeyHash) &&
+        getAfter(/databases/$(database)/documents/upload_gates/$(gateId)).data.createdAt == request.time;
+    }
+
     // Validation Blueprint: ApkApp
     function isValidApkApp(data) {
       return data.keys().hasAll([
           'name', 'desc', 'fullDesc', 'tag', 'version',
           'apkFileName', 'apkSize', 'apkUrl', 'image', 'url',
           'baseColor', 'chunkCount', 'features', 'tech',
-          'ownerId', 'published', 'createdAt', 'updatedAt'
+          'ownerId', 'gateId', 'published', 'archived', 'createdAt', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
           'name', 'desc', 'fullDesc', 'tag', 'version',
           'apkFileName', 'apkSize', 'apkUrl', 'image', 'url',
           'baseColor', 'chunkCount', 'features', 'tech',
-          'ownerId', 'published', 'createdAt', 'updatedAt'
+          'ownerId', 'gateId', 'published', 'archived', 'createdAt', 'updatedAt'
         ]) &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
         data.desc is string && data.desc.size() >= 1 && data.desc.size() <= 200 &&
@@ -64,22 +78,34 @@ service cloud.firestore {
         data.features is list && data.features.size() >= 1 && data.features.size() <= 6 && data.features[0] is string && data.features[0].size() <= 120 &&
         data.tech is list && data.tech.size() >= 1 && data.tech.size() <= 6 && data.tech[0] is string && data.tech[0].size() <= 60 &&
         data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
-        data.ownerId == request.auth.uid &&
+        isValidId(data.gateId) &&
         data.published is bool &&
+        data.archived is bool &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
 
     // Validation Blueprint: ApkChunk
     function isValidApkChunk(data) {
-      return data.keys().hasAll(['appId', 'index', 'data', 'ownerId', 'createdAt']) &&
-        data.keys().hasOnly(['appId', 'index', 'data', 'ownerId', 'createdAt']) &&
+      return data.keys().hasAll(['appId', 'index', 'data', 'ownerId', 'gateId', 'createdAt']) &&
+        data.keys().hasOnly(['appId', 'index', 'data', 'ownerId', 'gateId', 'createdAt']) &&
         data.appId is string && data.appId.size() >= 1 && data.appId.size() <= 128 && data.appId.matches('^[a-zA-Z0-9_\\-]+$') &&
         data.index is int && data.index >= 0 && data.index <= 40 &&
         data.data is string && data.data.size() >= 1 && data.data.size() <= 750000 &&
         data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
-        data.ownerId == request.auth.uid &&
+        isValidId(data.gateId) &&
         data.createdAt is timestamp;
+    }
+
+    // Write-only Atomic Upload Gate (zero read/list/update/delete)
+    match /upload_gates/{gateId} {
+      allow read, update, delete: if false;
+      allow create: if isValidId(gateId) &&
+        incoming().keys().hasAll(['passkeyHash', 'appId', 'createdAt']) &&
+        incoming().keys().hasOnly(['passkeyHash', 'appId', 'createdAt']) &&
+        isValidPasskeyHash(incoming().passkeyHash) &&
+        isValidId(incoming().appId) &&
+        incoming().createdAt == request.time;
     }
 
     // Admins registry (read-only from client)
@@ -93,27 +119,27 @@ service cloud.firestore {
       allow get: if isValidId(appId) && (existing().published == true || isAdmin());
       allow list: if existing().published == true || isAdmin();
 
-      allow create: if isSignedIn() &&
-        isValidId(appId) &&
+      allow create: if isValidId(appId) &&
         isValidApkApp(incoming()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
-        isAdmin();
+        (
+          (isAdmin() && incoming().ownerId == request.auth.uid) ||
+          (hasValidPasskeyGate(appId, incoming().gateId) && incoming().ownerId == 'passkey_admin')
+        );
 
-      allow update: if isSignedIn() &&
-        isValidId(appId) &&
+      allow update: if isValidId(appId) &&
         isValidApkApp(incoming()) &&
         incoming().ownerId == existing().ownerId &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
-        (
-          (incoming().diff(existing()).affectedKeys().hasOnly([
-            'name', 'desc', 'fullDesc', 'tag', 'version',
-            'apkFileName', 'apkSize', 'apkUrl', 'image', 'url',
-            'baseColor', 'chunkCount', 'features', 'tech',
-            'published', 'updatedAt'
-          ]) && isAdmin())
-        );
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'desc', 'fullDesc', 'tag', 'version',
+          'apkFileName', 'apkSize', 'apkUrl', 'image', 'url',
+          'baseColor', 'chunkCount', 'features', 'tech',
+          'published', 'archived', 'gateId', 'updatedAt'
+        ]) &&
+        (isAdmin() || hasValidPasskeyGate(appId, incoming().gateId));
 
       allow delete: if isSignedIn() && isValidId(appId) && isAdmin();
 
@@ -125,15 +151,16 @@ service cloud.firestore {
         );
         allow list: if false;
 
-        allow create: if isSignedIn() &&
-          isValidId(appId) &&
+        allow create: if isValidId(appId) &&
           isValidId(chunkId) &&
           isValidApkChunk(incoming()) &&
           incoming().appId == appId &&
           incoming().createdAt == request.time &&
           exists(/databases/$(database)/documents/apk_apps/$(appId)) &&
-          get(/databases/$(database)/documents/apk_apps/$(appId)).data.ownerId == request.auth.uid &&
-          isAdmin();
+          (
+            (isAdmin() && incoming().ownerId == request.auth.uid && get(/databases/$(database)/documents/apk_apps/$(appId)).data.ownerId == request.auth.uid) ||
+            (hasValidPasskeyGate(appId, incoming().gateId) && incoming().ownerId == 'passkey_admin')
+          );
 
         allow update: if false;
         allow delete: if isSignedIn() && isValidId(appId) && isValidId(chunkId) && isAdmin();

@@ -3,13 +3,13 @@ import {
   deleteDoc,
   doc,
   getDoc,
-  getDocs,
   getDocsFromServer,
   onSnapshot,
   query,
   serverTimestamp,
   setDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db, auth, ADMIN_EMAIL, handleFirestoreError, OperationType } from './firebase';
 
@@ -31,11 +31,140 @@ export interface StoredApkApp {
   tech: string[];
   ownerId: string;
   published: boolean;
+  archived?: boolean;
+  gateId?: string;
 }
 
 const IDB_NAME = 'owner_official_apk_db';
 const IDB_STORE = 'apk_blobs';
 const LOCAL_META_KEY = 'owner_official_apk_apps_v1';
+const PASSKEY_HASH_STORAGE_KEY = 'owner_admin_passkey_hash_v1';
+
+// Pure-TS SHA-256 fallback for non-HTTPS LAN phone testing if crypto.subtle is unavailable
+function sha256Fallback(ascii: string): string {
+  const rightRotate = (value: number, amount: number) =>
+    (value >>> amount) | (value << (32 - amount));
+
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  let result = '';
+  const words: number[] = [];
+  const asciiBitLength = ascii.length * 8;
+
+  const hash: number[] = [];
+  const k: number[] = [];
+  let primeCounter = 0;
+
+  const isComposite: Record<number, number> = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = 0; i < 313; i += candidate) {
+        isComposite[i] = candidate;
+      }
+      hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+
+  ascii += '\x80';
+  while ((ascii.length % 64) - 56) ascii += '\x00';
+  for (let i = 0; i < ascii.length; i++) {
+    const j = ascii.charCodeAt(i);
+    if (j >> 8) return '';
+    words[i >> 2] |= j << (((3 - i) % 4) * 8);
+  }
+  words[words.length] = (asciiBitLength / maxWord) | 0;
+  words[words.length] = asciiBitLength;
+
+  for (let j = 0; j < words.length; ) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = hash.slice(0);
+    for (let i = 0; i < 64; i++) {
+      const w15 = w[i - 15],
+        w2 = w[i - 2];
+      const a = hash[0],
+        e = hash[4];
+      const temp1 =
+        hash[7] +
+        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+        ((e & hash[5]) ^ (~e & hash[6])) +
+        k[i] +
+        (w[i] =
+          i < 16
+            ? w[i]
+            : (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
+      const temp2 =
+        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+        ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+
+      hash.unshift((temp1 + temp2) | 0);
+      hash[4] = (hash[4] + temp1) | 0;
+      hash.pop();
+    }
+    for (let i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+
+  for (let i = 0; i < 8; i++) {
+    for (let j = 3; j + 1; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += (b < 16 ? '0' : '') + b.toString(16);
+    }
+  }
+  return result;
+}
+
+export async function hashAdminPasskey(passkey: string): Promise<string> {
+  const normalized = passkey.trim();
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const bytes = new TextEncoder().encode(normalized);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  return sha256Fallback(unescape(encodeURIComponent(normalized)));
+}
+
+export function loadStoredPasskeyHash(): string {
+  try {
+    return localStorage.getItem(PASSKEY_HASH_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveStoredPasskeyHash(hash: string): void {
+  try {
+    if (hash) localStorage.setItem(PASSKEY_HASH_STORAGE_KEY, hash);
+    else localStorage.removeItem(PASSKEY_HASH_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export async function verifyAndSaveAdminPasskey(passkey: string): Promise<string> {
+  const passkeyHash = await hashAdminPasskey(passkey);
+  const testGateId = `verify_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
+  try {
+    await setDoc(doc(db, 'upload_gates', testGateId), {
+      passkeyHash,
+      appId: 'verify_gate_check',
+      createdAt: serverTimestamp(),
+    });
+    saveStoredPasskeyHash(passkeyHash);
+    return passkeyHash;
+  } catch {
+    throw new Error('Incorrect Admin Passkey. Please check your passkey and try again.');
+  }
+}
 
 function openApkIndexedDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -98,7 +227,7 @@ export function loadCachedApkApps(): StoredApkApp[] {
     const raw = localStorage.getItem(LOCAL_META_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.filter((a) => !a.archived) : [];
   } catch {
     return [];
   }
@@ -129,8 +258,13 @@ export function compressImageFile(file: File, maxWidth = 720, quality = 0.78): P
           return;
         }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(dataUrl.slice(0, 340000));
+        let q = quality;
+        let dataUrl = canvas.toDataURL('image/jpeg', q);
+        while (dataUrl.length > 340000 && q > 0.35) {
+          q -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', q);
+        }
+        resolve(dataUrl.slice(0, 345000));
       };
       img.onerror = reject;
       img.src = reader.result as string;
@@ -161,8 +295,14 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+function makeGateId(prefix: string): string {
+  const cleanPrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'gate';
+  const suffix = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  return `${cleanPrefix}_${suffix}`.slice(0, 120);
+}
+
 // Sanitize & clamp outgoing payload to match firebase-blueprint.json & firestore.rules
-function sanitizeApkAppPayload(input: StoredApkApp, uid: string) {
+function sanitizeApkAppPayload(input: StoredApkApp, uid: string, gateId: string) {
   const cleanHex = /^#[0-9a-fA-F]{3,8}$/.test(input.baseColor) ? input.baseColor : '#00ffd5';
   const cleanFeatures = (input.features.length > 0 ? input.features : ['Optimized Android Build'])
     .slice(0, 6)
@@ -191,7 +331,9 @@ function sanitizeApkAppPayload(input: StoredApkApp, uid: string) {
     features: cleanFeatures,
     tech: cleanTech,
     ownerId: uid,
+    gateId,
     published: Boolean(input.published),
+    archived: Boolean(input.archived),
   };
 }
 
@@ -215,6 +357,8 @@ function mapDocToApkApp(docSnap: { id: string; data: () => Record<string, any> }
     tech: Array.isArray(d.tech) ? d.tech : ['Android SDK'],
     ownerId: d.ownerId || '',
     published: Boolean(d.published),
+    archived: Boolean(d.archived),
+    gateId: d.gateId || '',
   };
 }
 
@@ -224,94 +368,104 @@ export function subscribePublishedApkApps(
   const q = query(collection(db, 'apk_apps'), where('published', '==', true));
 
   const applyCloudSnapshot = (cloudApps: StoredApkApp[]) => {
+    const activeCloudApps = cloudApps.filter((a) => !a.archived);
     const localOnlyApps = loadCachedApkApps().filter(
       (localApp) =>
         localApp.published &&
+        !localApp.archived &&
         localApp.ownerId === 'local_admin' &&
-        !cloudApps.some((c) => c.id === localApp.id)
+        !activeCloudApps.some((c) => c.id === localApp.id)
     );
-    const mergedApps = [...cloudApps, ...localOnlyApps];
+    const mergedApps = [...activeCloudApps, ...localOnlyApps];
     saveCachedApkApps(
       loadCachedApkApps()
-        .filter((a) => a.ownerId === 'local_admin' && !cloudApps.some((c) => c.id === a.id))
-        .concat(cloudApps)
+        .filter((a) => a.ownerId === 'local_admin' && !activeCloudApps.some((c) => c.id === a.id))
+        .concat(activeCloudApps)
     );
     onUpdate(mergedApps);
   };
 
-  // Eagerly fetch directly from Firestore server so every visitor phone gets fresh cloud apps immediately
   getDocsFromServer(q)
     .then((snap) => {
-      const cloudApps = snap.docs.map(mapDocToApkApp);
-      applyCloudSnapshot(cloudApps);
+      applyCloudSnapshot(snap.docs.map(mapDocToApkApp));
     })
     .catch(() => {
-      // onSnapshot below handles live updates & error fallback
+      // onSnapshot handles live updates & fallback
     });
 
   return onSnapshot(
     q,
     (snapshot) => {
-      const cloudApps = snapshot.docs.map(mapDocToApkApp);
-      applyCloudSnapshot(cloudApps);
+      applyCloudSnapshot(snapshot.docs.map(mapDocToApkApp));
     },
     (error) => {
       try {
         handleFirestoreError(error, OperationType.LIST, 'apk_apps');
       } catch {
-        // Fallback to cached local apps if offline
-        onUpdate(loadCachedApkApps().filter((a) => a.published));
+        onUpdate(loadCachedApkApps().filter((a) => a.published && !a.archived));
       }
     }
   );
 }
 
 export async function fetchAllAdminApkApps(): Promise<StoredApkApp[]> {
-  const isCloudAdmin =
+  const isGoogleAdmin =
     Boolean(auth.currentUser) &&
     auth.currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
-  if (!isCloudAdmin) {
-    return loadCachedApkApps();
-  }
-
   const path = 'apk_apps';
   try {
-    const snap = await getDocsFromServer(collection(db, path));
-    const cloudList: StoredApkApp[] = snap.docs.map(mapDocToApkApp);
-    // Keep any un-synced local_admin items visible so admin can push them to cloud
-    const localUnsynced = loadCachedApkApps().filter(
-      (a) => a.ownerId === 'local_admin' && !cloudList.some((c) => c.id === a.id)
+    // Google Admin can list all apps; Passkey mode lists all published apps directly from server + local drafts
+    const q = isGoogleAdmin
+      ? collection(db, path)
+      : query(collection(db, path), where('published', '==', true));
+
+    const snap = await getDocsFromServer(q);
+    const cloudList: StoredApkApp[] = snap.docs
+      .map(mapDocToApkApp)
+      .filter((a) => !a.archived);
+
+    const localUnsyncedOrDrafts = loadCachedApkApps().filter(
+      (a) =>
+        !a.archived &&
+        (a.ownerId === 'local_admin' || (!isGoogleAdmin && !a.published)) &&
+        !cloudList.some((c) => c.id === a.id)
     );
-    const combined = [...cloudList, ...localUnsynced];
+    const combined = [...cloudList, ...localUnsyncedOrDrafts];
     saveCachedApkApps(combined);
     return combined;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, path);
+    if (isGoogleAdmin) {
+      handleFirestoreError(error, OperationType.LIST, path);
+    }
+    return loadCachedApkApps();
   }
 }
 
 export async function publishOrUpdateApkApp(
   appData: StoredApkApp,
   apkFile: Blob | File | null,
-  onProgress?: (pct: number, statusText: string) => void
+  onProgress?: (pct: number, statusText: string) => void,
+  passkeyHashOverride?: string
 ): Promise<StoredApkApp> {
-  if (!auth.currentUser) {
+  const isGoogleAdmin =
+    Boolean(auth.currentUser) &&
+    auth.currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const activePasskeyHash = passkeyHashOverride || loadStoredPasskeyHash();
+
+  if (!isGoogleAdmin && !activePasskeyHash) {
     throw new Error(
-      `Sign in with Google (${ADMIN_EMAIL}) first so Firebase saves this app for every device.`
-    );
-  }
-  if (auth.currentUser.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-    throw new Error(
-      `Signed in as ${auth.currentUser.email}. Please sign in with ${ADMIN_EMAIL} to publish to Firebase.`
+      'Enter your Fast Admin Passkey first (or Sign In with Google) to upload to Firebase Cloud.'
     );
   }
 
-  const safeId = appData.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100) || `apk_${Date.now()}`;
+  const safeId =
+    appData.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100) || `apk_${Date.now()}`;
   const CHUNK_BYTE_SIZE = 480 * 1024; // ~640KB base64 per chunk (< 750KB limit)
 
   let chunkCount = appData.chunkCount || 0;
   let apkUrl = appData.apkUrl;
+  const revPrefix = `r${Date.now().toString(36)}`;
 
   if (apkFile) {
     const hasExternalUrl =
@@ -327,109 +481,146 @@ export async function publishOrUpdateApkApp(
 
     if (apkFile.size <= 18 * 1024 * 1024) {
       chunkCount = Math.ceil(apkFile.size / CHUNK_BYTE_SIZE);
-      apkUrl = hasExternalUrl ? apkUrl : 'cloud-chunks';
+      apkUrl = hasExternalUrl ? apkUrl : `cloud-chunks:${revPrefix}`;
     }
   }
 
-  const uid = auth.currentUser.uid;
-  const sanitized = sanitizeApkAppPayload(
-    {
-      ...appData,
-      id: safeId,
-      chunkCount,
-      apkUrl,
-    },
-    uid
-  );
+  const defaultUid = isGoogleAdmin ? auth.currentUser!.uid : 'passkey_admin';
+  const mainGateId = makeGateId(`${safeId}_m`);
 
-  const finalRecord: StoredApkApp = {
-    id: safeId,
-    ...sanitized,
-  };
-
-  let previousChunkCount = 0;
   const docRef = doc(db, 'apk_apps', safeId);
   onProgress?.(25, 'Writing app record to Firebase Firestore...');
+
+  let resolvedOwnerId = defaultUid;
+  let finalRecord: StoredApkApp | null = null;
+
   try {
     const existingSnap = await getDoc(docRef);
-    if (existingSnap.exists()) {
-      const existingData = existingSnap.data();
-      previousChunkCount = typeof existingData.chunkCount === 'number' ? existingData.chunkCount : 0;
-      await setDoc(docRef, {
-        ...sanitized,
-        ownerId: existingData.ownerId || uid,
-        createdAt: existingData.createdAt || serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      await setDoc(docRef, {
-        ...sanitized,
+    const existingData = existingSnap.exists() ? existingSnap.data() : null;
+    if (existingData?.ownerId) {
+      resolvedOwnerId = existingData.ownerId;
+    }
+
+    const sanitized = sanitizeApkAppPayload(
+      {
+        ...appData,
+        id: safeId,
+        chunkCount,
+        apkUrl,
+      },
+      resolvedOwnerId,
+      mainGateId
+    );
+
+    finalRecord = {
+      id: safeId,
+      ...sanitized,
+    };
+
+    const batch = writeBatch(db);
+    if (!isGoogleAdmin) {
+      batch.set(doc(db, 'upload_gates', mainGateId), {
+        passkeyHash: activePasskeyHash,
+        appId: safeId,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
     }
+
+    batch.set(docRef, {
+      ...sanitized,
+      createdAt: existingData?.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    await batch.commit();
   } catch (error) {
+    if (!isGoogleAdmin && String(error).toLowerCase().includes('permission')) {
+      saveStoredPasskeyHash('');
+      throw new Error('Passkey rejected by Firebase rules. Please re-enter your Admin Passkey.');
+    }
     handleFirestoreError(error, OperationType.WRITE, `apk_apps/${safeId}`);
   }
 
-  // Delete old binary chunks before creating new ones (rules forbid overwriting chunks directly)
-  if (apkFile && previousChunkCount > 0) {
-    for (let i = 0; i < previousChunkCount; i++) {
-      try {
-        await deleteDoc(doc(db, 'apk_apps', safeId, 'chunks', `chunk_${i}`));
-      } catch {
-        // ignore missing chunk
-      }
-    }
-  }
-
-  // Upload binary chunks if an APK file was selected and fits cloud chunk limit
-  if (apkFile && chunkCount > 0 && apkUrl === 'cloud-chunks') {
+  // Upload binary chunks in fast atomic batches (4 chunks per batch <= 2.6MB)
+  if (apkFile && chunkCount > 0 && apkUrl.startsWith('cloud-chunks')) {
     const buffer = await apkFile.arrayBuffer();
-    for (let i = 0; i < chunkCount; i++) {
-      const start = i * CHUNK_BYTE_SIZE;
-      const end = Math.min(buffer.byteLength, start + CHUNK_BYTE_SIZE);
-      const slice = buffer.slice(start, end);
-      const base64Data = arrayBufferToBase64(slice);
-      const chunkId = `chunk_${i}`;
-      const chunkPath = `apk_apps/${safeId}/chunks/${chunkId}`;
+    const BATCH_CHUNKS = 4;
+    const chunkOwnerId = isGoogleAdmin ? auth.currentUser!.uid : 'passkey_admin';
 
-      const pct = 30 + Math.round(((i + 1) / chunkCount) * 65);
-      onProgress?.(pct, `Uploading APK part ${i + 1} of ${chunkCount} to Firebase...`);
+    for (let startIdx = 0; startIdx < chunkCount; startIdx += BATCH_CHUNKS) {
+      const endIdx = Math.min(chunkCount, startIdx + BATCH_CHUNKS);
+      const chunkGateId = makeGateId(`${safeId}_c${startIdx}`);
+      const chunkBatch = writeBatch(db);
 
-      try {
-        await setDoc(doc(db, 'apk_apps', safeId, 'chunks', chunkId), {
+      if (!isGoogleAdmin) {
+        chunkBatch.set(doc(db, 'upload_gates', chunkGateId), {
+          passkeyHash: activePasskeyHash,
+          appId: safeId,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      for (let i = startIdx; i < endIdx; i++) {
+        const start = i * CHUNK_BYTE_SIZE;
+        const end = Math.min(buffer.byteLength, start + CHUNK_BYTE_SIZE);
+        const slice = buffer.slice(start, end);
+        const base64Data = arrayBufferToBase64(slice);
+        const chunkId = `${revPrefix}_chunk_${i}`;
+
+        chunkBatch.set(doc(db, 'apk_apps', safeId, 'chunks', chunkId), {
           appId: safeId,
           index: i,
           data: base64Data,
-          ownerId: uid,
+          ownerId: chunkOwnerId,
+          gateId: chunkGateId,
           createdAt: serverTimestamp(),
         });
+      }
+
+      const pct = 30 + Math.round((endIdx / chunkCount) * 65);
+      onProgress?.(pct, `Uploading APK parts ${startIdx + 1}-${endIdx} of ${chunkCount}...`);
+
+      try {
+        await chunkBatch.commit();
       } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, chunkPath);
+        handleFirestoreError(
+          error,
+          OperationType.CREATE,
+          `apk_apps/${safeId}/chunks/${revPrefix}_chunk_${startIdx}`
+        );
       }
     }
   }
 
-  // Update local cache only after Firebase Firestore succeeded
-  const existingLocal = loadCachedApkApps().filter((a) => a.id !== safeId);
-  saveCachedApkApps([finalRecord, ...existingLocal]);
+  if (finalRecord) {
+    const existingLocal = loadCachedApkApps().filter((a) => a.id !== safeId);
+    saveCachedApkApps(
+      finalRecord.archived ? existingLocal : [finalRecord, ...existingLocal]
+    );
+  }
 
   onProgress?.(100, 'Synced to Firebase Cloud! Visible on all phones.');
-  return finalRecord;
+  return finalRecord!;
 }
 
 // Push any previously saved local_admin apps on this phone up to Firebase Cloud
 export async function syncLocalAppsToCloud(
-  onProgress?: (statusText: string) => void
+  onProgress?: (statusText: string) => void,
+  passkeyHashOverride?: string
 ): Promise<number> {
-  if (!auth.currentUser || auth.currentUser.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  const isGoogleAdmin =
+    Boolean(auth.currentUser) &&
+    auth.currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const activePasskeyHash = passkeyHashOverride || loadStoredPasskeyHash();
+
+  if (!isGoogleAdmin && !activePasskeyHash) {
     return 0;
   }
 
   const localOnly = loadCachedApkApps().filter(
     (a) =>
       a.ownerId === 'local_admin' &&
+      !a.archived &&
       a.id !== 'loki_x_prime_apk' &&
       a.id !== 'commerce_prime_apk'
   );
@@ -442,40 +633,76 @@ export async function syncLocalAppsToCloud(
     const hasExternalUrl =
       app.apkUrl.startsWith('http://') || app.apkUrl.startsWith('https://');
     const usableBlob =
-      localBlob && (localBlob.size <= 18 * 1024 * 1024 || hasExternalUrl) ? localBlob : null;
+      localBlob && (localBlob.size <= 18 * 1024 * 1024 || hasExternalUrl)
+        ? localBlob
+        : null;
     await publishOrUpdateApkApp(
       {
         ...app,
         apkUrl:
           !usableBlob && app.apkUrl === 'local-idb' ? 'cloud-chunks' : app.apkUrl,
       },
-      usableBlob
+      usableBlob,
+      undefined,
+      activePasskeyHash
     );
     syncedCount++;
   }
   return syncedCount;
 }
 
-export async function removeApkApp(appId: string, chunkCount = 0): Promise<void> {
-  await deleteLocalApkBlob(appId);
-  const remaining = loadCachedApkApps().filter((a) => a.id !== appId);
+export async function removeApkApp(
+  app: StoredApkApp,
+  passkeyHashOverride?: string
+): Promise<void> {
+  const isGoogleAdmin =
+    Boolean(auth.currentUser) &&
+    auth.currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const activePasskeyHash = passkeyHashOverride || loadStoredPasskeyHash();
+
+  await deleteLocalApkBlob(app.id);
+  const remaining = loadCachedApkApps().filter((a) => a.id !== app.id);
   saveCachedApkApps(remaining);
 
-  if (auth.currentUser) {
-    for (let i = 0; i < chunkCount; i++) {
-      const chunkId = `chunk_${i}`;
+  if (app.ownerId === 'local_admin') {
+    return;
+  }
+
+  if (isGoogleAdmin) {
+    const rev = app.apkUrl.startsWith('cloud-chunks:')
+      ? app.apkUrl.split(':')[1]
+      : '';
+    for (let i = 0; i < app.chunkCount; i++) {
+      const chunkId = rev ? `${rev}_chunk_${i}` : `chunk_${i}`;
       try {
-        await deleteDoc(doc(db, 'apk_apps', appId, 'chunks', chunkId));
+        await deleteDoc(doc(db, 'apk_apps', app.id, 'chunks', chunkId));
       } catch {
         // continue deleting parent
       }
     }
     try {
-      await deleteDoc(doc(db, 'apk_apps', appId));
+      await deleteDoc(doc(db, 'apk_apps', app.id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `apk_apps/${appId}`);
+      handleFirestoreError(error, OperationType.DELETE, `apk_apps/${app.id}`);
     }
+    return;
   }
+
+  if (!activePasskeyHash) {
+    throw new Error('Unlock with Admin Passkey or Sign In with Google to remove cloud apps.');
+  }
+
+  // Passkey mode soft-deletes atomically via archived: true, published: false
+  await publishOrUpdateApkApp(
+    {
+      ...app,
+      published: false,
+      archived: true,
+    },
+    null,
+    undefined,
+    activePasskeyHash
+  );
 }
 
 // Create a valid downloadable Android APK binary blob for instant download
@@ -519,9 +746,12 @@ export async function triggerApkDownload(
 
   // 3. Reassemble from Firestore chunks if stored in cloud
   if (app.chunkCount > 0) {
+    const rev = app.apkUrl.startsWith('cloud-chunks:')
+      ? app.apkUrl.split(':')[1]
+      : '';
     const parts: Uint8Array[] = [];
     for (let i = 0; i < app.chunkCount; i++) {
-      const chunkId = `chunk_${i}`;
+      const chunkId = rev ? `${rev}_chunk_${i}` : `chunk_${i}`;
       const chunkPath = `apk_apps/${app.id}/chunks/${chunkId}`;
       try {
         const snap = await getDoc(doc(db, 'apk_apps', app.id, 'chunks', chunkId));
@@ -563,7 +793,6 @@ export async function triggerApkDownload(
   const manifestContent = `Manifest-Version: 1.0\r\nPackage-Name: com.ownerofficial.${app.id.toLowerCase()}\r\nApp-Name: ${app.name}\r\nVersion-Name: ${app.version}\r\nCreated-By: OWNER_OFFICIAL Android Release\r\n`;
   const encoder = new TextEncoder();
   const payloadBytes = encoder.encode(manifestContent);
-  // Minimal ZIP local file header signature (PK\x03\x04) so Android / OS recognizes APK archive structure
   const zipHeader = new Uint8Array([
     0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00,
   ]);

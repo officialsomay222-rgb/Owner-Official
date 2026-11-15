@@ -19,6 +19,8 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
+  KeyRound,
+  Lock,
 } from 'lucide-react';
 import { auth, googleProvider, ADMIN_EMAIL } from './firebase';
 import {
@@ -29,6 +31,9 @@ import {
   syncLocalAppsToCloud,
   compressImageFile,
   triggerApkDownload,
+  loadStoredPasskeyHash,
+  saveStoredPasskeyHash,
+  verifyAndSaveAdminPasskey,
 } from './apkStore';
 
 interface AdminPanelProps {
@@ -78,6 +83,9 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+  const [passkeyInput, setPasskeyInput] = useState<string>('');
+  const [passkeyHash, setPasskeyHash] = useState<string>(() => loadStoredPasskeyHash());
+  const [verifyingPasskey, setVerifyingPasskey] = useState<boolean>(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
@@ -99,11 +107,17 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
     }
   };
 
-  const handleSyncLocalToCloud = async (quietIfNone = false) => {
+  const handleSyncLocalToCloud = async (
+    quietIfNone = false,
+    overrideHash?: string
+  ) => {
     setIsSyncingCloud(true);
     setErrorMessage('');
     try {
-      const count = await syncLocalAppsToCloud((msg) => setStatusMessage(msg));
+      const count = await syncLocalAppsToCloud(
+        (msg) => setStatusMessage(msg),
+        overrideHash || passkeyHash
+      );
       await loadApps();
       onAppsChanged();
       if (count > 0) {
@@ -122,15 +136,43 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
 
   useEffect(() => {
     if (!authLoading) {
-      const isAdminEmail =
+      const isGoogleAdmin =
         user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-      if (isAdminEmail) {
+      if (isGoogleAdmin || passkeyHash) {
         handleSyncLocalToCloud(true);
       } else {
         loadApps();
       }
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, passkeyHash]);
+
+  const handleUnlockPasskey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setStatusMessage('');
+    if (!passkeyInput.trim()) {
+      setErrorMessage('Enter your Admin Passkey to unlock cloud uploads.');
+      return;
+    }
+    setVerifyingPasskey(true);
+    try {
+      const verifiedHash = await verifyAndSaveAdminPasskey(passkeyInput);
+      setPasskeyHash(verifiedHash);
+      setPasskeyInput('');
+      setStatusMessage('Fast Upload Unlocked! Connected to Firebase Cloud.');
+      await handleSyncLocalToCloud(true, verifiedHash);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Incorrect Admin Passkey.');
+    } finally {
+      setVerifyingPasskey(false);
+    }
+  };
+
+  const handleLockPasskey = () => {
+    saveStoredPasskeyHash('');
+    setPasskeyHash('');
+    setStatusMessage('Fast Upload locked.');
+  };
 
   const handleGoogleSignIn = async () => {
     setErrorMessage('');
@@ -140,12 +182,11 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
     } catch (err: any) {
       if (err?.code === 'auth/popup-blocked') {
         setErrorMessage(
-          'Popup was blocked by your browser. Allow popups for this site and tap Sign In again.'
+          'Google popup was blocked. Use the Fast Admin Passkey box below instead — works on every phone!'
         );
       } else {
         setErrorMessage(
-          err?.message ||
-            'Google Sign-In failed. Sign in with officialsomay222@gmail.com to publish to Firebase.'
+          'Google Sign-In unavailable on this browser. Use the Fast Admin Passkey unlock below instead.'
         );
       }
     }
@@ -290,26 +331,32 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
       published,
     };
 
-    if (!isCloudAdmin) {
+    if (!isCloudReady) {
       setErrorMessage(
-        user
-          ? `Signed in as ${user.email}. Switch to ${ADMIN_EMAIL} to save to Firebase Cloud.`
-          : `Sign in with Google (${ADMIN_EMAIL}) first so your app saves to Firebase and shows on all phones.`
+        'Enter your Fast Admin Passkey above first so your app uploads directly to Firebase Cloud.'
       );
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await publishOrUpdateApkApp(record, selectedApkFile, (pct, msg) => {
-        setUploadProgress(pct);
-        setStatusMessage(msg);
-      });
+      await publishOrUpdateApkApp(
+        record,
+        selectedApkFile,
+        (pct, msg) => {
+          setUploadProgress(pct);
+          setStatusMessage(msg);
+        },
+        passkeyHash
+      );
       await loadApps();
       onAppsChanged();
       resetForm();
       setStatusMessage('Published to Firebase Cloud! Now visible on every phone.');
     } catch (err: any) {
+      if (String(err?.message || '').toLowerCase().includes('passkey')) {
+        setPasskeyHash('');
+      }
       setErrorMessage(err?.message || 'Failed to save APK app to Firebase.');
     } finally {
       setIsSubmitting(false);
@@ -318,12 +365,12 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
 
   const handleDelete = async (app: StoredApkApp) => {
     setErrorMessage('');
-    if (!isCloudAdmin && app.ownerId !== 'local_admin') {
-      setErrorMessage(`Sign in with Google (${ADMIN_EMAIL}) to delete cloud apps.`);
+    if (!isCloudReady && app.ownerId !== 'local_admin') {
+      setErrorMessage('Unlock with your Fast Admin Passkey above to delete cloud apps.');
       return;
     }
     try {
-      await removeApkApp(app.id, app.chunkCount);
+      await removeApkApp(app, passkeyHash);
       await loadApps();
       onAppsChanged();
       setStatusMessage(`Removed "${app.name}"`);
@@ -334,12 +381,17 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
 
   const handleTogglePublish = async (app: StoredApkApp) => {
     setErrorMessage('');
-    if (!isCloudAdmin) {
-      setErrorMessage(`Sign in with Google (${ADMIN_EMAIL}) to update cloud visibility.`);
+    if (!isCloudReady) {
+      setErrorMessage('Unlock with your Fast Admin Passkey above to update cloud visibility.');
       return;
     }
     try {
-      await publishOrUpdateApkApp({ ...app, published: !app.published }, null);
+      await publishOrUpdateApkApp(
+        { ...app, published: !app.published },
+        null,
+        undefined,
+        passkeyHash
+      );
       await loadApps();
       onAppsChanged();
     } catch (err: any) {
@@ -347,7 +399,8 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
     }
   };
 
-  const isCloudAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const isGoogleAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const isCloudReady = isGoogleAdmin || Boolean(passkeyHash);
   const localOnlyCount = apps.filter((a) => a.ownerId === 'local_admin').length;
 
   return (
@@ -385,17 +438,28 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
         </div>
 
         {/* Cloud Auth Status */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {passkeyHash && (
+            <button
+              type="button"
+              onClick={handleLockPasskey}
+              className="px-3 py-1.5 rounded-lg border border-[#00ffd5]/40 bg-[#00ffd5]/10 text-[#00ffd5] text-[11px] font-mono flex items-center gap-1.5 cursor-pointer hover:bg-[#00ffd5]/20"
+              title="Lock Passkey Session"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Passkey Active</span>
+            </button>
+          )}
           {user ? (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <span
                 className={`text-[11px] font-mono px-3 py-1.5 rounded-lg border ${
-                  isCloudAdmin
+                  isGoogleAdmin
                     ? 'border-[#00ffd5]/40 bg-[#00ffd5]/10 text-[#00ffd5]'
                     : 'border-amber-500/40 bg-amber-500/10 text-amber-400'
                 }`}
               >
-                {isCloudAdmin ? `Cloud Admin: ${user.email}` : `Signed in: ${user.email}`}
+                {user.email}
               </span>
               <button
                 type="button"
@@ -406,30 +470,30 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
-          ) : (
+          ) : !passkeyHash ? (
             <button
               type="button"
               onClick={handleGoogleSignIn}
-              className="px-4 py-2 rounded-xl bg-[#00ffd5] text-black font-bold text-xs tracking-wider uppercase hover:opacity-90 transition-opacity cursor-pointer"
+              className="px-3 py-1.5 rounded-lg border border-white/15 text-zinc-300 hover:text-white text-[11px] font-mono uppercase tracking-wider cursor-pointer"
             >
-              Sign In with Google (Cloud Sync)
+              Google Login
             </button>
-          )}
+          ) : null}
         </div>
       </header>
 
-      {/* Firebase Cloud Sync Banner */}
+      {/* Fast Cloud Upload Unlock Banner */}
       <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-6">
-        {isCloudAdmin ? (
+        {isCloudReady ? (
           <div className="rounded-2xl border border-[#00ffd5]/30 bg-[#00ffd5]/10 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <Cloud className="w-5 h-5 text-[#00ffd5] shrink-0" />
               <div>
-                <p className="text-xs font-mono font-bold uppercase tracking-wider text-[#00ffd5]">
-                  Firebase Cloud Connected ({user?.email})
+                <p className={`text-xs font-mono font-bold uppercase tracking-wider ${isLight ? 'text-teal-700' : 'text-[#00ffd5]'}`}>
+                  Firebase Cloud Ready ({isGoogleAdmin ? user?.email : 'Fast Passkey Mode'})
                 </p>
-                <p className="text-[11px] text-zinc-300">
-                  Apps published here save to Firestore and show up on every phone and browser.
+                <p className={`text-[11px] ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
+                  Apps published here upload straight to Firebase and appear on every phone instantly.
                 </p>
               </div>
             </div>
@@ -447,27 +511,42 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
             )}
           </div>
         ) : (
-          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <CloudOff className="w-5 h-5 text-amber-400 shrink-0" />
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <CloudOff className="w-5 h-5 text-amber-500 shrink-0 mt-0.5 sm:mt-0" />
               <div>
-                <p className="text-xs font-mono font-bold uppercase tracking-wider text-amber-300">
-                  {user
-                    ? `Wrong Account (${user.email}) — Firebase Sync Locked`
-                    : 'Not Signed In to Firebase Cloud'}
+                <p className={`text-xs font-mono font-bold uppercase tracking-wider ${isLight ? 'text-amber-700' : 'text-amber-300'}`}>
+                  Fast Cloud Unlock (No Google Login Needed)
                 </p>
-                <p className="text-[11px] text-zinc-300 mt-0.5">
-                  Sign in with <span className="font-mono font-bold text-white">{ADMIN_EMAIL}</span> so your apps upload to Firebase and appear on everyone&apos;s phone (not just yours).
+                <p className={`text-[11px] mt-0.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
+                  Enter your Admin Passkey once to upload directly to Firebase from any phone browser.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              className="px-4 py-2.5 rounded-xl bg-[#00ffd5] text-black font-bold text-xs tracking-wider uppercase hover:opacity-90 transition-opacity cursor-pointer shrink-0"
-            >
-              Sign In with Google
-            </button>
+
+            <form onSubmit={handleUnlockPasskey} className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-52">
+                <KeyRound className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="password"
+                  value={passkeyInput}
+                  onChange={(e) => setPasskeyInput(e.target.value)}
+                  placeholder="Enter Admin Passkey"
+                  className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs focus:border-[#00ffd5] outline-none ${
+                    isLight
+                      ? 'bg-white border-black/20 text-zinc-900'
+                      : 'bg-black/50 border-white/15 text-white'
+                  }`}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={verifyingPasskey}
+                className="px-4 py-2.5 rounded-xl bg-[#00ffd5] text-black font-bold text-xs tracking-wider uppercase hover:opacity-90 transition-opacity cursor-pointer shrink-0 disabled:opacity-60"
+              >
+                {verifyingPasskey ? 'Checking...' : 'Unlock'}
+              </button>
+            </form>
           </div>
         )}
       </div>

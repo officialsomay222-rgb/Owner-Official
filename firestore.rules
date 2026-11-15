@@ -41,12 +41,13 @@ service cloud.firestore {
         hash == 'adaa118260b981ae2f48ffd08e5fc23da0aeddf7ff9c9979cdff54a0134feed6';
     }
 
+    // Gate must NOT exist before this batch, and MUST exist after this batch with matching appId & passkeyHash
     function hasValidPasskeyGate(appId, gateId) {
       return isValidId(gateId) &&
+        !exists(/databases/$(database)/documents/upload_gates/$(gateId)) &&
         existsAfter(/databases/$(database)/documents/upload_gates/$(gateId)) &&
         getAfter(/databases/$(database)/documents/upload_gates/$(gateId)).data.appId == appId &&
-        isValidPasskeyHash(getAfter(/databases/$(database)/documents/upload_gates/$(gateId)).data.passkeyHash) &&
-        getAfter(/databases/$(database)/documents/upload_gates/$(gateId)).data.createdAt == request.time;
+        isValidPasskeyHash(getAfter(/databases/$(database)/documents/upload_gates/$(gateId)).data.passkeyHash);
     }
 
     // Validation Blueprint: ApkApp
@@ -116,7 +117,7 @@ service cloud.firestore {
 
     // APK Showcase Apps Collection
     match /apk_apps/{appId} {
-      allow get: if isValidId(appId) && (existing().published == true || isAdmin());
+      allow get: if isValidId(appId) && ((resource != null && existing().published == true) || isAdmin());
       allow list: if existing().published == true || isAdmin();
 
       allow create: if isValidId(appId) &&

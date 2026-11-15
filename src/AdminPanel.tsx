@@ -160,7 +160,6 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
       setPasskeyHash(verifiedHash);
       setPasskeyInput('');
       setStatusMessage('Fast Upload Unlocked! Connected to Firebase Cloud.');
-      await handleSyncLocalToCloud(true, verifiedHash);
     } catch (err: any) {
       setErrorMessage(err?.message || 'Incorrect Admin Passkey.');
     } finally {
@@ -327,7 +326,8 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
       chunkCount: existingApp?.chunkCount || 0,
       features: features.length > 0 ? features : ['Hardware Accelerated Android APK'],
       tech: tech.length > 0 ? tech : ['Android APK', 'ARM64'],
-      ownerId: user?.uid || 'local_admin',
+      ownerId: existingApp?.ownerId || user?.uid || 'local_admin',
+      gateId: existingApp?.gateId || '',
       published,
     };
 
@@ -354,9 +354,6 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
       resetForm();
       setStatusMessage('Published to Firebase Cloud! Now visible on every phone.');
     } catch (err: any) {
-      if (String(err?.message || '').toLowerCase().includes('passkey')) {
-        setPasskeyHash('');
-      }
       setErrorMessage(err?.message || 'Failed to save APK app to Firebase.');
     } finally {
       setIsSubmitting(false);

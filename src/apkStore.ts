@@ -491,32 +491,28 @@ export async function publishOrUpdateApkApp(
   const docRef = doc(db, 'apk_apps', safeId);
   onProgress?.(25, 'Writing app record to Firebase Firestore...');
 
-  let resolvedOwnerId = defaultUid;
-  let finalRecord: StoredApkApp | null = null;
+  const isExistingCloudDoc =
+    Boolean(appData.gateId) &&
+    appData.ownerId !== 'local_admin';
+
+  const resolvedOwnerId = isExistingCloudDoc ? appData.ownerId : defaultUid;
+  const sanitized = sanitizeApkAppPayload(
+    {
+      ...appData,
+      id: safeId,
+      chunkCount,
+      apkUrl,
+    },
+    resolvedOwnerId,
+    mainGateId
+  );
+
+  const finalRecord: StoredApkApp = {
+    id: safeId,
+    ...sanitized,
+  };
 
   try {
-    const existingSnap = await getDoc(docRef);
-    const existingData = existingSnap.exists() ? existingSnap.data() : null;
-    if (existingData?.ownerId) {
-      resolvedOwnerId = existingData.ownerId;
-    }
-
-    const sanitized = sanitizeApkAppPayload(
-      {
-        ...appData,
-        id: safeId,
-        chunkCount,
-        apkUrl,
-      },
-      resolvedOwnerId,
-      mainGateId
-    );
-
-    finalRecord = {
-      id: safeId,
-      ...sanitized,
-    };
-
     const batch = writeBatch(db);
     if (!isGoogleAdmin) {
       batch.set(doc(db, 'upload_gates', mainGateId), {
@@ -526,19 +522,52 @@ export async function publishOrUpdateApkApp(
       });
     }
 
-    batch.set(docRef, {
-      ...sanitized,
-      createdAt: existingData?.createdAt || serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    if (isExistingCloudDoc) {
+      const { ownerId: _ignoredOwner, ...updatableFields } = sanitized;
+      batch.update(docRef, {
+        ...updatableFields,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      batch.set(docRef, {
+        ...sanitized,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     await batch.commit();
-  } catch (error) {
-    if (!isGoogleAdmin && String(error).toLowerCase().includes('permission')) {
-      saveStoredPasskeyHash('');
-      throw new Error('Passkey rejected by Firebase rules. Please re-enter your Admin Passkey.');
+  } catch (error: any) {
+    // Fallback if an edited cloud doc was previously removed remotely
+    if (isExistingCloudDoc && String(error?.code || error).includes('not-found')) {
+      const retryGateId = makeGateId(`${safeId}_r`);
+      const retrySanitized = sanitizeApkAppPayload(
+        {
+          ...appData,
+          id: safeId,
+          chunkCount,
+          apkUrl,
+        },
+        defaultUid,
+        retryGateId
+      );
+      const retryBatch = writeBatch(db);
+      if (!isGoogleAdmin) {
+        retryBatch.set(doc(db, 'upload_gates', retryGateId), {
+          passkeyHash: activePasskeyHash,
+          appId: safeId,
+          createdAt: serverTimestamp(),
+        });
+      }
+      retryBatch.set(docRef, {
+        ...retrySanitized,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await retryBatch.commit();
+    } else {
+      handleFirestoreError(error, OperationType.WRITE, `apk_apps/${safeId}`);
     }
-    handleFirestoreError(error, OperationType.WRITE, `apk_apps/${safeId}`);
   }
 
   // Upload binary chunks in fast atomic batches (4 chunks per batch <= 2.6MB)

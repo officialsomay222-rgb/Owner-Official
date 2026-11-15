@@ -223,8 +223,20 @@ export function subscribePublishedApkApps(
           published: Boolean(d.published),
         };
       });
-      saveCachedApkApps(cloudApps);
-      onUpdate(cloudApps);
+      // Merge cloud-synced apps with any offline/local_admin entries so newly added APKs remain visible
+      const localOnlyApps = loadCachedApkApps().filter(
+        (localApp) =>
+          localApp.published &&
+          localApp.ownerId === 'local_admin' &&
+          !cloudApps.some((c) => c.id === localApp.id)
+      );
+      const mergedApps = [...cloudApps, ...localOnlyApps];
+      saveCachedApkApps(
+        loadCachedApkApps()
+          .filter((a) => a.ownerId === 'local_admin' && !cloudApps.some((c) => c.id === a.id))
+          .concat(cloudApps)
+      );
+      onUpdate(mergedApps);
     },
     (error) => {
       try {

@@ -134,43 +134,6 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
     setErrorMessage('');
   };
 
-  const handleSelectPresetApp = (preset: 'loki' | 'commerce') => {
-    resetForm();
-    if (preset === 'loki') {
-      setEditingId('loki_x_prime_apk');
-      setName('Loki X Prime');
-      setDesc('Next-gen web & Android APK engineered for zero-latency engagement.');
-      setFullDesc(
-        'Official Android APK build of Loki X Prime. Engineered deeply with physics-based motion and hardware-accelerated rendering across every smartphone.'
-      );
-      setTag('Android APK');
-      setVersion('v2.4.0');
-      setApkFileName('Loki-X-Prime-v2.4.0.apk');
-      setApkSize('16.8 MB');
-      setImage('https://i.ibb.co/27vjwr6f/Screenshot-20260617-125714-Loki-Prime-X.jpg');
-      setUrl('https://loki-x-prime.vercel.app/');
-      setBaseColor('#ff00c8');
-      setFeaturesText('Hardware Accelerated UI, Intelligent State Routing, Native Android APK');
-      setTechText('Android APK, React 18, GPU Compositor');
-    } else {
-      setEditingId('commerce_prime_apk');
-      setName('Commerce Prime');
-      setDesc('High-speed algorithmic Android APK built for modern commerce.');
-      setFullDesc(
-        'Official Android APK package for Commerce Prime. Strips away bloated interfaces, offering pure speed and sub-millisecond visual feedback.'
-      );
-      setTag('Android APK');
-      setVersion('v1.8.5');
-      setApkFileName('Commerce-Prime-v1.8.5.apk');
-      setApkSize('12.4 MB');
-      setImage('https://i.ibb.co/LdwsZdj2/Screenshot-20260617-125701-Chrome.jpg');
-      setUrl('https://commerce-prime.vercel.app/');
-      setBaseColor('#00ffd5');
-      setFeaturesText('Real-time Algorithmic Engine, Dynamic Metric Dashboards, Native APK Build');
-      setTechText('Android APK, Next.js Core, Secure Logic');
-    }
-  };
-
   const handleEditExisting = (app: StoredApkApp) => {
     setEditingId(app.id);
     setName(app.name);
@@ -287,7 +250,7 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
       await loadApps();
       onAppsChanged();
       resetForm();
-      setStatusMessage('APK App saved & live on the 3D showcase slider!');
+      setStatusMessage('APK App saved & live in the Apps section!');
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to save APK app.');
     } finally {
@@ -403,7 +366,7 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
                   {editingId ? 'Update APK Release' : 'Publish New APK App'}
                 </h2>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Upload an Android .apk file or attach an APK to any showcase phone tile.
+                  Upload a standalone Android .apk package or provide a direct APK download link for the Apps section.
                 </p>
               </div>
 
@@ -416,29 +379,6 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
                   + New Blank App
                 </button>
               )}
-            </div>
-
-            {/* Quick Attach to Existing Showcase Apps */}
-            <div className="mb-6 p-3.5 rounded-2xl border border-white/10 bg-white/[0.02]">
-              <span className="block text-[10px] font-mono uppercase tracking-widest text-zinc-400 mb-2.5">
-                Quick-Fill Built-In Showcase Apps (Attach APK):
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSelectPresetApp('loki')}
-                  className="px-3 py-1.5 rounded-lg border border-[#ff00c8]/40 bg-[#ff00c8]/10 text-[#ff00c8] text-xs font-mono hover:bg-[#ff00c8]/20 transition-colors cursor-pointer"
-                >
-                  Attach APK to Loki X Prime
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectPresetApp('commerce')}
-                  className="px-3 py-1.5 rounded-lg border border-[#00ffd5]/40 bg-[#00ffd5]/10 text-[#00ffd5] text-xs font-mono hover:bg-[#00ffd5]/20 transition-colors cursor-pointer"
-                >
-                  Attach APK to Commerce Prime
-                </button>
-              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -786,7 +726,7 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
                   No custom APK packages published yet
                 </p>
                 <p className="text-[11px] text-zinc-500 mt-1">
-                  Use the form on the left to upload an .apk file or attach an APK to Loki X Prime / Commerce Prime.
+                  Use the form on the left to upload an .apk file or add a direct APK download link.
                 </p>
               </div>
             ) : (
@@ -837,7 +777,7 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
                               app.published ? 'text-emerald-400' : 'text-zinc-500'
                             }`}
                           >
-                            {app.published ? '● Live on Main Slider' : '○ Hidden Draft'}
+                            {app.published ? '● Live in Apps Section' : '○ Hidden Draft'}
                           </span>
                         </div>
                       </div>

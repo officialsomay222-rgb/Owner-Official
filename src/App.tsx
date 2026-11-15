@@ -127,8 +127,8 @@ const XIcon = ({ className }: { className?: string }) => (
 );
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12.031 0C5.385 0 0 5.385 0 12.031c0 2.112.551 4.17 1.594 5.968l-1.523 5.565 5.69-1.493a11.966 11.966 0 006.27 1.761c6.646 0 12.034-5.385 12.034-12.031S18.677 0 12.031 0zm6.183 17.387c-.255.72-.884 1.34-1.614 1.488-.584.119-1.332.186-2.585-.236-4.51-1.503-7.533-5.263-7.753-5.564-.22-.3-.1.185-1.85-2.65-.185-2.65.185 1.528 2.062 2.378 2.062.85 0 1.262-.39 1.772-.39s.51.524.73.524 1.353-.105 1.72-.255.454-3.567.873-4.137.98-.363 1.135-.363c.156 0 .397.028.583.085.185.057.426.114.58.426.24.496.824 2.013.895 2.155s.114.283.028.453-.142.227-.3.397c-.156.17-.326.38-.47.51-.156.128-.323.27-.142.582.185.312.823 1.353 1.763 2.195 1.216 1.09 2.228 1.43 2.54 1.58.312.142.496.114.68-.1.185-.213.794-.922.994-1.233.213-.312.41-.255.71-.142.284.114 1.8.85 2.11 1.006.313.156.526.227.597.355.085.128.085.737-.17 1.46z" />
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2ZM12.05 20.15C10.57 20.15 9.11 19.75 7.84 19L7.54 18.82L4.42 19.64L5.25 16.6L5.05 16.29C4.23 14.98 3.79 13.46 3.79 11.91C3.79 7.37 7.49 3.67 12.04 3.67C14.24 3.67 16.31 4.53 17.87 6.09C19.42 7.64 20.28 9.71 20.28 11.92C20.28 16.46 16.59 20.15 12.05 20.15ZM16.57 13.99C16.32 13.87 15.11 13.27 14.88 13.19C14.65 13.11 14.49 13.07 14.32 13.32C14.15 13.57 13.68 14.13 13.54 14.29C13.39 14.46 13.25 14.48 13 14.35C12.75 14.23 11.96 13.97 11.01 13.12C10.28 12.47 9.78 11.66 9.64 11.41C9.49 11.17 9.62 11.03 9.75 10.91C9.86 10.8 10 10.62 10.12 10.48C10.24 10.33 10.29 10.23 10.37 10.06C10.45 9.9 10.41 9.75 10.35 9.63C10.29 9.5 9.79 8.29 9.59 7.8C9.39 7.32 9.19 7.39 9.04 7.38C8.9 7.37 8.73 7.37 8.56 7.37C8.4 7.37 8.13 7.43 7.91 7.68C7.68 7.93 7.04 8.53 7.04 9.75C7.04 10.97 7.93 12.14 8.05 12.31C8.18 12.47 9.8 14.98 12.28 16.05C12.87 16.31 13.33 16.46 13.69 16.57C14.28 16.76 14.82 16.73 15.25 16.67C15.72 16.6 16.71 16.07 16.91 15.5C17.12 14.92 17.12 14.43 17.06 14.32C17 14.22 16.82 14.12 16.57 13.99Z" />
   </svg>
 );
 
@@ -723,41 +723,19 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Merge default apps with any admin-published APK releases
-  const allApps: AppProject[] = useMemo(() => {
-    const merged = defaultApps.map((baseApp) => {
-      const matchedApk = publishedApks.find(
+  // 3D Phone Viewer apps remain separate from downloadable APK apps
+  const phoneApps: AppProject[] = defaultApps;
+
+  // Standalone downloadable APK apps for #apps section (ZERO default apps)
+  const apkSectionApps: AppProject[] = useMemo(() => {
+    return publishedApks
+      .filter(
         (apk) =>
-          apk.id === baseApp.id ||
-          apk.name.toLowerCase() === baseApp.name.toLowerCase()
-      );
-      if (!matchedApk) return baseApp;
-      return {
-        ...baseApp,
-        desc: matchedApk.desc || baseApp.desc,
-        fullDesc: matchedApk.fullDesc || baseApp.fullDesc,
-        tag: matchedApk.tag || baseApp.tag,
-        image: matchedApk.image || baseApp.image,
-        url: matchedApk.url && matchedApk.url !== '#' ? matchedApk.url : baseApp.url,
-        baseColor: matchedApk.baseColor || baseApp.baseColor,
-        glowColor: `${matchedApk.baseColor || baseApp.baseColor}66`,
-        features: matchedApk.features?.length ? matchedApk.features : baseApp.features,
-        tech: matchedApk.tech?.length ? matchedApk.tech : baseApp.tech,
-        apkData: matchedApk,
-      };
-    });
-
-    // Append any custom standalone APK apps added in #admin
-    const customApks = publishedApks.filter(
-      (apk) =>
-        !defaultApps.some(
-          (b) => b.id === apk.id || b.name.toLowerCase() === apk.name.toLowerCase()
-        )
-    );
-
-    customApks.forEach((apk, idx) => {
-      const numStr = String(merged.length + 1 + idx).padStart(2, '0');
-      merged.push({
+          apk.id !== 'loki_x_prime_apk' &&
+          apk.id !== 'commerce_prime_apk' &&
+          !defaultApps.some((b) => b.name.toLowerCase() === apk.name.toLowerCase())
+      )
+      .map((apk, idx) => ({
         id: apk.id,
         name: apk.name,
         desc: apk.desc,
@@ -766,7 +744,7 @@ export default function App() {
         icon: <Smartphone className="w-4 h-4" />,
         image: apk.image || undefined,
         url: apk.url || '#',
-        number: numStr,
+        number: String(idx + 1).padStart(2, '0'),
         iconColor: 'text-[#00ffd5]',
         baseColor: apk.baseColor || '#00ffd5',
         gradient: 'from-[#00ffd5] to-[#ff00c8]',
@@ -774,10 +752,7 @@ export default function App() {
         features: apk.features,
         tech: apk.tech,
         apkData: apk,
-      });
-    });
-
-    return merged;
+      }));
   }, [publishedApks]);
 
   const spaceSectionRef = useRef<HTMLElement | null>(null);
@@ -835,8 +810,8 @@ export default function App() {
   const ringScale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 1.25, 0.9]);
   const ringRotate = useTransform(scrollYProgress, [0, 1], [0, 180]);
 
-  const safeSlideIndex = ((activeSlide % allApps.length) + allApps.length) % allApps.length;
-  const currentActiveApp = allApps[safeSlideIndex] || allApps[0];
+  const safeSlideIndex = ((activeSlide % phoneApps.length) + phoneApps.length) % phoneApps.length;
+  const currentActiveApp = phoneApps[safeSlideIndex] || phoneApps[0];
 
   useEffect(() => {
     spaceIntensityRef.current = isShowcaseInView ? 1 : 0.2;
@@ -846,7 +821,7 @@ export default function App() {
   // Animate virtualIndex smoothly to target index with incoming momentum
   const selectSlideManual = useCallback(
     (targetIdx: number, swipeVelocityPx = 0) => {
-      const total = allApps.length;
+      const total = phoneApps.length;
       if (total <= 0) return;
       const normalizedTarget = ((targetIdx % total) + total) % total;
       const currentV = virtualIndex.get();
@@ -857,7 +832,7 @@ export default function App() {
 
       const nextVirtual = Math.round(currentV + delta);
       setActiveSlide(normalizedTarget);
-      activeColorRef.current = allApps[normalizedTarget].baseColor;
+      activeColorRef.current = phoneApps[normalizedTarget].baseColor;
 
       const clampedVel = Math.max(-1800, Math.min(1800, swipeVelocityPx));
       animate(virtualIndex, nextVirtual, {
@@ -868,7 +843,7 @@ export default function App() {
         velocity: clampedVel ? -clampedVel / spreadRef.current : 0,
       });
     },
-    [allApps, virtualIndex]
+    [phoneApps, virtualIndex]
   );
 
   const settleSwipe = useCallback(
@@ -1229,7 +1204,7 @@ export default function App() {
         </nav>
 
         {/* --- MINIMAL HERO SECTION (TIGHT & BALANCED) --- */}
-        <section className="min-h-[85dvh] sm:min-h-[92dvh] w-full flex flex-col items-center justify-center text-center px-4 pt-24 pb-8 relative">
+        <section className="min-h-[76dvh] sm:min-h-[82dvh] w-full flex flex-col items-center justify-center text-center px-4 pt-24 pb-6 relative">
           <div className="flex flex-col items-center justify-center">
             {/* Staggered Spring Letters */}
             <div className="flex items-center justify-center select-none">
@@ -1275,7 +1250,7 @@ export default function App() {
 
             {/* A.K.A OWNER Sweep Badge */}
             <motion.a
-              href="#work"
+              href="#apps"
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.7, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
@@ -1300,19 +1275,162 @@ export default function App() {
 
           {/* Minimal Scroll Indicator */}
           <motion.a
-            href="#work"
+            href="#apps"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.85, duration: 0.7 }}
-            className={`mt-8 sm:mt-12 flex flex-col items-center gap-2 ${
+            className={`mt-7 sm:mt-10 flex flex-col items-center gap-2 ${
               isLight ? 'text-zinc-500' : 'text-zinc-400'
             }`}
           >
             <span className="text-[9px] uppercase tracking-[0.35em] font-semibold">
-              Explore Showcase
+              Explore Apps
             </span>
             <div className="w-[1px] h-7 bg-gradient-to-b from-[#00ffd5] to-transparent" />
           </motion.a>
+        </section>
+
+        {/* --- APPS SECTION (AFTER SOMAY HERO, BEFORE 3D PHONE VIEWER — ZERO DEFAULT APPS) --- */}
+        <section
+          id="apps"
+          className="w-full py-6 sm:py-10 relative z-10 flex flex-col items-center px-4"
+        >
+          <div className="w-full max-w-5xl">
+            <div className="flex items-end justify-between gap-4 mb-5 sm:mb-7 px-1">
+              <div>
+                <span className="text-[9px] font-mono uppercase tracking-[0.35em] text-[#00ffd5] block mb-1">
+                  ANDROID RELEASES
+                </span>
+                <h2
+                  className={`text-xl sm:text-2xl md:text-3xl font-display font-black uppercase tracking-tight ${
+                    isLight ? 'text-zinc-900' : 'text-white'
+                  }`}
+                >
+                  Apps &amp; APKs
+                </h2>
+              </div>
+              <a
+                href="#work"
+                className={`text-[10px] font-mono uppercase tracking-[0.25em] flex items-center gap-1.5 transition-colors hover:text-[#00ffd5] whitespace-nowrap shrink-0 ${
+                  isLight ? 'text-zinc-600' : 'text-zinc-400'
+                }`}
+              >
+                <span>3D Phones</span>
+                <MoveUpRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
+            {apkSectionApps.length === 0 ? (
+              <div
+                className={`rounded-2xl border border-dashed px-6 py-8 text-center ${
+                  isLight
+                    ? 'bg-white/60 border-black/15 text-zinc-500'
+                    : 'bg-[#08080f]/60 border-white/10 text-zinc-400'
+                }`}
+              >
+                <p className="text-xs font-mono uppercase tracking-[0.24em]">
+                  No APK Releases Published Yet
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+                {apkSectionApps.map((app) => (
+                  <div
+                    key={app.id || app.name}
+                    onClick={() => setActiveApp(app)}
+                    className={`group rounded-2xl border p-4 sm:p-5 flex flex-col justify-between transition-all duration-200 cursor-pointer active:scale-[0.99] ${
+                      isLight
+                        ? 'bg-white/90 border-black/10 hover:border-black/25 shadow-sm'
+                        : 'bg-[#08080f]/90 border-white/10 hover:border-white/25'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className="w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 overflow-hidden"
+                            style={{
+                              borderColor: `${app.baseColor}44`,
+                              backgroundColor: `${app.baseColor}14`,
+                              color: app.baseColor,
+                            }}
+                          >
+                            {app.image ? (
+                              <img
+                                src={app.image}
+                                alt={app.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              app.icon
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h3
+                              className={`font-display font-bold text-sm sm:text-base tracking-tight truncate ${
+                                isLight ? 'text-zinc-900' : 'text-white'
+                              }`}
+                            >
+                              {app.name}
+                            </h3>
+                            <p
+                              className={`text-[11px] font-mono truncate ${
+                                isLight ? 'text-zinc-500' : 'text-zinc-400'
+                              }`}
+                            >
+                              {app.tag}
+                              {app.apkData ? ` · ${app.apkData.version}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p
+                        className={`text-xs leading-relaxed line-clamp-2 mb-4 ${
+                          isLight ? 'text-zinc-600' : 'text-zinc-400'
+                        }`}
+                      >
+                        {app.desc}
+                      </p>
+                    </div>
+
+                    <div
+                      className={`flex items-center justify-between gap-2 pt-3 border-t ${
+                        isLight ? 'border-black/10' : 'border-white/10'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveApp(app);
+                        }}
+                        className="text-[10px] font-mono uppercase tracking-[0.2em] font-semibold hover:opacity-80 transition-opacity whitespace-nowrap cursor-pointer"
+                        style={{ color: app.baseColor }}
+                      >
+                        App Details
+                      </button>
+
+                      {app.apkData && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (app.apkData) handleDownloadApkFromModal(app.apkData);
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider text-black flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition-opacity whitespace-nowrap"
+                          style={{ backgroundColor: app.baseColor }}
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>APK ({app.apkData.apkSize})</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* --- 3D DEEP SPACE ASSET SHOWCASE (120FPS BUTTER-SMOOTH SLIDER ON ALL PHONES) --- */}
@@ -1361,12 +1479,12 @@ export default function App() {
                 }}
               />
 
-              {allApps.map((app, index) => (
+              {phoneApps.map((app, index) => (
                 <SpacePhoneGlassTile
                   key={app.id || app.name}
                   app={app}
                   index={index}
-                  total={allApps.length}
+                  total={phoneApps.length}
                   isActive={index === safeSlideIndex}
                   onSelect={() => selectSlideManual(index)}
                   onInspect={() => setActiveApp(app)}
@@ -1397,7 +1515,7 @@ export default function App() {
 
                 {/* Minimal Paginated Dots */}
                 <div className="flex items-center gap-2.5">
-                  {allApps.map((app, i) => (
+                  {phoneApps.map((app, i) => (
                     <button
                       key={app.id || app.name}
                       type="button"

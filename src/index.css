@@ -101,8 +101,13 @@ body {
 }
 
 .scene-3d {
-  perspective: 1400px;
+  perspective: 1200px;
   transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 

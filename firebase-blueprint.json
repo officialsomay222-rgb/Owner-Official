@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "ApkApp": {
+      "title": "ApkApp",
+      "description": "A showcase mobile application with downloadable Android APK metadata",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Application display name"
+        },
+        "desc": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Short summary description"
+        },
+        "fullDesc": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "Full detailed description"
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Category tag such as Android APK or Web Platform"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30,
+          "description": "Release version string e.g. v1.2.0"
+        },
+        "apkFileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Download filename ending in .apk"
+        },
+        "apkSize": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30,
+          "description": "Formatted APK file size e.g. 18.4 MB"
+        },
+        "apkUrl": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "External direct download URL or internal chunked indicator"
+        },
+        "image": {
+          "type": "string",
+          "maxLength": 350000,
+          "description": "App screenshot URL or compressed data URI"
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Live web preview URL"
+        },
+        "baseColor": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 30,
+          "pattern": "^#[0-9a-fA-F]{3,8}$",
+          "description": "Hex accent color"
+        },
+        "chunkCount": {
+          "type": "integer",
+          "description": "Number of binary APK chunks stored in subcollection"
+        },
+        "features": {
+          "type": "array",
+          "description": "Key engineering highlights (up to 6 items)"
+        },
+        "tech": {
+          "type": "array",
+          "description": "Technology stack labels (up to 6 items)"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the admin who published the APK"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Whether the app is publicly visible on the main showcase"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "name",
+        "desc",
+        "fullDesc",
+        "tag",
+        "version",
+        "apkFileName",
+        "apkSize",
+        "apkUrl",
+        "image",
+        "url",
+        "baseColor",
+        "chunkCount",
+        "features",
+        "tech",
+        "ownerId",
+        "published",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ApkChunk": {
+      "title": "ApkChunk",
+      "description": "Binary base64 slice of a downloadable APK file",
+      "type": "object",
+      "properties": {
+        "appId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent ApkApp document ID"
+        },
+        "index": {
+          "type": "integer",
+          "description": "Zero-based chunk order index"
+        },
+        "data": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 750000,
+          "description": "Base64 encoded binary slice"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Admin owner UID"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp"
+        }
+      },
+      "required": [
+        "appId",
+        "index",
+        "data",
+        "ownerId",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/apk_apps/{appId}": {
+      "schema": {
+        "$ref": "#/entities/ApkApp"
+      },
+      "description": "Collection of downloadable APK applications managed via the hidden #admin panel"
+    },
+    "/apk_apps/{appId}/chunks/{chunkId}": {
+      "schema": {
+        "$ref": "#/entities/ApkChunk"
+      },
+      "description": "Binary base64 chunks for uploaded APK files associated with an ApkApp"
+    }
+  }
+}

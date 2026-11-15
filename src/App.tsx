@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   motion,
   AnimatePresence,
@@ -31,10 +31,20 @@ import {
   ChevronRight,
   CheckCircle2,
   Sparkles,
+  Download,
+  Smartphone,
 } from 'lucide-react';
+import AdminPanel from './AdminPanel';
+import {
+  type StoredApkApp,
+  loadCachedApkApps,
+  subscribePublishedApkApps,
+  triggerApkDownload,
+} from './apkStore';
 
 // --- DATA ---
-interface AppProject {
+export interface AppProject {
+  id?: string;
   name: string;
   desc: string;
   fullDesc: string;
@@ -49,10 +59,12 @@ interface AppProject {
   glowColor: string;
   features: string[];
   tech: string[];
+  apkData?: StoredApkApp;
 }
 
-const myApps: AppProject[] = [
+const defaultApps: AppProject[] = [
   {
+    id: 'loki_x_prime_apk',
     name: 'Loki X Prime',
     desc: 'Next-gen web interface engineered for zero-latency engagement.',
     fullDesc:
@@ -70,6 +82,7 @@ const myApps: AppProject[] = [
     tech: ['React 18', 'Motion Physics', 'GPU Compositor'],
   },
   {
+    id: 'commerce_prime_apk',
     name: 'Commerce Prime',
     desc: 'High-speed algorithmic utility built for modern commerce.',
     fullDesc:
@@ -87,6 +100,7 @@ const myApps: AppProject[] = [
     tech: ['Next.js Framework', 'Tailwind Engine', 'Secure Logic'],
   },
   {
+    id: 'classified_build',
     name: 'Classified Build',
     desc: 'Stealth digital infrastructure currently in restricted development.',
     fullDesc:
@@ -163,7 +177,7 @@ const getSocialLinks = (isLight: boolean) => [
   },
 ];
 
-// Silent automatic hardware optimization
+// Silent automatic hardware optimization for low-budget & mid-range phones
 function detectSilentLowSpec(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -171,24 +185,28 @@ function detectSilentLowSpec(): boolean {
     const nav = navigator as any;
     const cores = nav.hardwareConcurrency || 8;
     const memory = nav.deviceMemory || 8;
-    const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isMobile =
+      window.innerWidth <= 768 ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     return isMobile || cores <= 6 || memory <= 4;
   } catch {
     return false;
   }
 }
 
-// --- 3D DEEP SPACE WARP CANVAS (Lag-free on mid-range, ultra-cinematic on flagship) ---
+// --- 3D DEEP SPACE WARP CANVAS (Pauses during active touch drag on budget phones for 100% slider FPS) ---
 function SpaceWarpCanvas({
   isLight,
   lowSpec,
   spaceIntensityRef,
   activeColorRef,
+  isDraggingRef,
 }: {
   isLight: boolean;
   lowSpec: boolean;
   spaceIntensityRef: React.MutableRefObject<number>;
   activeColorRef: React.MutableRefObject<string>;
+  isDraggingRef: React.MutableRefObject<boolean>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -201,9 +219,9 @@ function SpaceWarpCanvas({
     let animationFrameId: number;
     let isPaused = false;
 
-    // Cap DPR on mobile / mid-range to prevent GPU buffer exhaustion
+    // Cap DPR on mobile / budget devices to prevent GPU fill-rate bottleneck
     const updateSize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, lowSpec ? 1.25 : 1.5);
+      const dpr = Math.min(window.devicePixelRatio || 1, lowSpec ? 1.0 : 1.5);
       canvas.width = Math.floor(window.innerWidth * dpr);
       canvas.height = Math.floor(window.innerHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -216,7 +234,6 @@ function SpaceWarpCanvas({
     };
     window.addEventListener('resize', handleResize, { passive: true });
 
-    // Pause rendering loop when tab is backgrounded
     const handleVisibilityChange = () => {
       isPaused = document.hidden;
       if (!isPaused) {
@@ -226,7 +243,7 @@ function SpaceWarpCanvas({
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const isMobile = window.innerWidth < 768;
-    const starCount = isMobile ? (lowSpec ? 32 : 46) : lowSpec ? 55 : 110;
+    const starCount = isMobile ? (lowSpec ? 24 : 36) : lowSpec ? 48 : 100;
     const stars = Array.from({ length: starCount }, () => ({
       x: (Math.random() - 0.5) * 2000,
       y: (Math.random() - 0.5) * 2000,
@@ -237,12 +254,19 @@ function SpaceWarpCanvas({
     const render = () => {
       if (isPaused) return;
 
+      // On budget/mobile devices, skip canvas repaint while user is actively dragging the 3D slider
+      // so 100% of CPU/GPU frame budget is dedicated to butter-smooth 3D phone motion
+      if ((lowSpec || isMobile) && isDraggingRef.current) {
+        animationFrameId = requestAnimationFrame(render);
+        return;
+      }
+
       const w = window.innerWidth;
       const h = window.innerHeight;
       ctx.clearRect(0, 0, w, h);
 
       const intensity = spaceIntensityRef.current;
-      const speed = 1.0 + intensity * (lowSpec ? 5 : 12);
+      const speed = 1.0 + intensity * (lowSpec ? 4.5 : 11);
       const cx = w / 2;
       const cy = h / 2;
 
@@ -263,7 +287,6 @@ function SpaceWarpCanvas({
           const depthAlpha = (1 - star.z / 1000) * (0.28 + intensity * 0.72);
           const radius = star.size * (1 + (1 - star.z / 1000) * 1.3);
 
-          // Warp streaks when intensity is active and device is flagship desktop
           if (intensity > 0.15 && !lowSpec && !isMobile) {
             const prevK = 420 / (star.z + speed * 1.6);
             const prevPx = cx + star.x * prevK;
@@ -281,7 +304,6 @@ function SpaceWarpCanvas({
             ctx.stroke();
           }
 
-          // Ultra-fast rendering: direct point fills on mobile/mid-range, circular arcs on high-end
           if (lowSpec || isMobile) {
             ctx.fillStyle = isLight
               ? `rgba(24, 24, 27, ${depthAlpha * 0.65})`
@@ -309,7 +331,7 @@ function SpaceWarpCanvas({
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isLight, lowSpec, spaceIntensityRef, activeColorRef]);
+  }, [isLight, lowSpec, spaceIntensityRef, activeColorRef, isDraggingRef]);
 
   return (
     <canvas
@@ -324,14 +346,14 @@ function PhoneHardwareButtons() {
   return (
     <>
       {/* Left Edge: Action / Mute Slider */}
-      <div className="absolute -left-[3px] sm:-left-[3.5px] top-18 w-[3px] sm:w-[3.5px] h-3.5 bg-gradient-to-r from-zinc-300 via-zinc-400 to-zinc-600 rounded-l-[1.5px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] pointer-events-none" />
+      <div className="absolute -left-[3px] sm:-left-[3.5px] top-18 w-[3px] sm:w-[3.5px] h-3.5 bg-gradient-to-r from-zinc-300 via-zinc-400 to-zinc-600 rounded-l-[1.5px] pointer-events-none" />
       {/* Left Edge: Volume Up Button */}
-      <div className="absolute -left-[3px] sm:-left-[3.5px] top-26 w-[3px] sm:w-[3.5px] h-10 bg-gradient-to-r from-zinc-300 via-zinc-400 to-zinc-600 rounded-l-[1.5px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] pointer-events-none" />
+      <div className="absolute -left-[3px] sm:-left-[3.5px] top-26 w-[3px] sm:w-[3.5px] h-10 bg-gradient-to-r from-zinc-300 via-zinc-400 to-zinc-600 rounded-l-[1.5px] pointer-events-none" />
       {/* Left Edge: Volume Down Button */}
-      <div className="absolute -left-[3px] sm:-left-[3.5px] top-40 w-[3px] sm:w-[3.5px] h-10 bg-gradient-to-r from-zinc-300 via-zinc-400 to-zinc-600 rounded-l-[1.5px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] pointer-events-none" />
+      <div className="absolute -left-[3px] sm:-left-[3.5px] top-40 w-[3px] sm:w-[3.5px] h-10 bg-gradient-to-r from-zinc-300 via-zinc-400 to-zinc-600 rounded-l-[1.5px] pointer-events-none" />
 
       {/* Right Edge: Elongated Power / Lock Button */}
-      <div className="absolute -right-[3px] sm:-right-[3.5px] top-30 w-[3px] sm:w-[3.5px] h-14 bg-gradient-to-l from-zinc-300 via-zinc-400 to-zinc-600 rounded-r-[1.5px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] pointer-events-none" />
+      <div className="absolute -right-[3px] sm:-right-[3.5px] top-30 w-[3px] sm:w-[3.5px] h-14 bg-gradient-to-l from-zinc-300 via-zinc-400 to-zinc-600 rounded-r-[1.5px] pointer-events-none" />
 
       {/* Antenna Break Lines on Titanium Band */}
       <div className="absolute -left-[1px] top-11 w-[2px] h-[1.5px] bg-zinc-600/60 pointer-events-none" />
@@ -339,13 +361,13 @@ function PhoneHardwareButtons() {
       <div className="absolute -left-[1px] bottom-14 w-[2px] h-[1.5px] bg-zinc-600/60 pointer-events-none" />
       <div className="absolute -right-[1px] bottom-14 w-[2px] h-[1.5px] bg-zinc-600/60 pointer-events-none" />
 
-      {/* Ultra-Slim Micro Acoustic Earpiece Slit (Precisely on top outer edge, zero obstruction of status bar) */}
+      {/* Ultra-Slim Micro Acoustic Earpiece Slit */}
       <div className="absolute top-[1px] left-1/2 -translate-x-1/2 w-12 sm:w-14 h-[1.5px] bg-zinc-800/90 border border-white/10 rounded-full z-20 pointer-events-none" />
     </>
   );
 }
 
-// --- REALISTIC NOTCHLESS PHONE STATUS BAR (DYNAMIC THEMED BACKDROP) ---
+// --- REALISTIC NOTCHLESS PHONE STATUS BAR (ZERO GPU BLUR OVERHEAD, DEDICATED HEADER) ---
 function PhoneStatusBar({
   app,
   isModal = false,
@@ -353,7 +375,6 @@ function PhoneStatusBar({
   app?: AppProject;
   isModal?: boolean;
 }) {
-  // Dynamic solid backdrop tailored to the app header tone so content never clashes
   const dynamicBackdrop = useMemo(() => {
     if (!app) {
       return {
@@ -373,24 +394,23 @@ function PhoneStatusBar({
         borderBottom: '1px solid rgba(0, 255, 213, 0.22)',
       };
     }
-    // Classified Build / Stealth
     return {
       backgroundColor: '#08080c',
-      borderBottom: '1px solid rgba(255, 251, 0, 0.22)',
+      borderBottom: `1px solid ${app.baseColor}33`,
     };
   }, [app]);
 
   return (
     <div
       style={dynamicBackdrop}
-      className={`w-full flex items-center justify-between select-none pointer-events-none transition-colors duration-300 ${
+      className={`w-full flex items-center justify-between select-none pointer-events-none ${
         isModal
           ? 'h-[26px] sm:h-[28px] px-3.5 sm:px-4'
           : 'h-[28px] sm:h-[32px] px-4 sm:px-5'
       }`}
     >
       {/* Authentic Phone Time */}
-      <span className="font-semibold text-[10.5px] sm:text-[11.5px] tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] font-sans select-none">
+      <span className="font-semibold text-[10.5px] sm:text-[11.5px] tracking-tight text-white font-sans select-none">
         9:41
       </span>
 
@@ -398,7 +418,7 @@ function PhoneStatusBar({
       <div className="flex-1" />
 
       {/* Top Status Indicators: Cellular, Wi-Fi, Battery */}
-      <div className="flex items-center gap-1.5 sm:gap-2 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+      <div className="flex items-center gap-1.5 sm:gap-2 text-white">
         {/* Cellular 4-Bar Signal */}
         <svg className="w-3.5 h-2.5 sm:w-4 sm:h-3" viewBox="0 0 17 12" fill="currentColor">
           <rect x="0.5" y="8" width="2.5" height="4" rx="0.75" />
@@ -414,7 +434,7 @@ function PhoneStatusBar({
 
         {/* Realistic Battery Pill with 98% Charge */}
         <div className="flex items-center">
-          <div className="w-[20px] sm:w-[22px] h-[10px] sm:h-[11px] rounded-[3px] border border-white/90 p-[1px] flex items-center bg-black/35 shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
+          <div className="w-[20px] sm:w-[22px] h-[10px] sm:h-[11px] rounded-[3px] border border-white/90 p-[1px] flex items-center bg-black/40">
             <div className="h-full w-[88%] bg-white rounded-[1.5px]" />
           </div>
           <div className="w-[1.5px] h-[3.5px] bg-white/90 rounded-r-[1px] -ml-[0.5px]" />
@@ -424,127 +444,103 @@ function PhoneStatusBar({
   );
 }
 
-// --- PURE PHONE SCREEN GLASS TILE (100% NOTCHLESS, LAG-FREE, ULTRA-SLEEK) ---
+// --- PURE PHONE SCREEN GLASS TILE (PEAK PERFORMANCE 60/120FPS 3D ENGINE, 100% NOTCHLESS) ---
 function SpacePhoneGlassTile({
   app,
-  offset,
+  index,
+  total,
   isActive,
   onSelect,
   onInspect,
   isLight,
   lowSpec,
-  isDraggingRef,
-  dragOffset,
+  spreadPx,
+  didDragRef,
+  virtualIndex,
 }: {
   app: AppProject;
-  offset: number; // -1 (left in space), 0 (center active), +1 (right in space)
+  index: number;
+  total: number;
   isActive: boolean;
   onSelect: () => void;
   onInspect: () => void;
   isLight: boolean;
   lowSpec: boolean;
-  isDraggingRef: React.MutableRefObject<boolean>;
-  dragOffset: MotionValue<number>;
+  spreadPx: number;
+  didDragRef: React.MutableRefObject<boolean>;
+  virtualIndex: MotionValue<number>;
 }) {
-  const rotateX = useSpring(0, { stiffness: 280, damping: 28 });
-  const rotateY = useSpring(0, { stiffness: 280, damping: 28 });
+  // Continuous circular offset computed directly from the single unified virtualIndex MotionValue
+  const currentOffset = useTransform(virtualIndex, (v) => {
+    if (total <= 1) return 0;
+    const mod = ((v % total) + total) % total;
+    let diff = index - mod;
+    if (diff > total / 2) diff -= total;
+    if (diff < -total / 2) diff += total;
+    return diff;
+  });
 
-  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!isActive || lowSpec || e.pointerType === 'touch' || isDraggingRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pctX = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
-    const pctY = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
-    rotateX.set(-pctY * 6);
-    rotateY.set(pctX * 6);
-  }
+  // Single unified GPU 3D transform string (eliminates multi-property matrix overhead & preserve-3d bottlenecks)
+  const unifiedTransform = useTransform(currentOffset, (val) => {
+    const abs = Math.abs(val);
+    const clampedAbs = Math.min(abs, 1.8);
+    const tx = val * spreadPx;
+    const ty = clampedAbs * (lowSpec ? 10 : 14);
+    const tz = -clampedAbs * (lowSpec ? 95 : 145);
+    const rotY = Math.max(-34, Math.min(34, val * (lowSpec ? -20 : -26)));
+    const scale = 1 - clampedAbs * 0.14;
+    return `perspective(1050px) translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, ${tz.toFixed(1)}px) rotateY(${rotY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+  });
 
-  function handlePointerLeave() {
-    rotateX.set(0);
-    rotateY.set(0);
-  }
+  const liveOpacity = useTransform(currentOffset, (val) => {
+    const abs = Math.abs(val);
+    if (abs > 1.55) return 0;
+    return Math.max(0.42, 1 - Math.min(abs, 1.55) * 0.44);
+  });
 
-  // Base animated offset that smoothly springs between discrete slide changes
-  const baseOffset = useMotionValue(offset);
-
-  useEffect(() => {
-    const current = baseOffset.get();
-    // When an item wraps from -1 to +1 (or vice versa behind the view), jump without crossing center
-    if (Math.abs(offset - current) > 1.2) {
-      baseOffset.set(offset);
-    } else {
-      animate(baseOffset, offset, {
-        type: 'spring',
-        stiffness: 240,
-        damping: 28,
-        mass: 0.7,
-      });
-    }
-  }, [offset, baseOffset]);
-
-  // Pixel travel distance corresponding to 1 slide transition
-  const SWIPE_SPAN = 210;
-
-  // Real-time continuous combination of resting slide spring and live drag gesture
-  const currentOffset = useTransform(
-    [baseOffset, dragOffset],
-    ([b, d]) => (b as number) + (d as number) / SWIPE_SPAN
-  );
-
-  const liveX = useTransform(currentOffset, (val) => `${val * 68}%`);
-  const liveZ = useTransform(currentOffset, (val) => 50 - Math.abs(val) * 160);
-  const liveRotateY = useTransform(currentOffset, (val) => val * -22);
-  const liveScale = useTransform(currentOffset, (val) => 1 - Math.min(Math.abs(val), 1.5) * 0.16);
-  const liveOpacity = useTransform(currentOffset, (val) => Math.max(0.35, 1 - Math.min(Math.abs(val), 1.5) * 0.46));
-
-  const absOffset = Math.abs(offset);
+  // Discrete 3-step zIndex prevents continuous DOM stacking-context churn during drag
+  const liveZIndex = useTransform(currentOffset, (val) => {
+    const abs = Math.abs(val);
+    if (abs < 0.5) return 30;
+    if (abs < 1.2) return 20;
+    return 10;
+  });
 
   return (
     <motion.div
       style={{
-        x: liveX,
-        z: liveZ,
-        rotateY: liveRotateY,
-        scale: liveScale,
+        transform: unifiedTransform,
         opacity: liveOpacity,
-        zIndex: isActive ? 30 : 10 - absOffset,
-        transformStyle: 'preserve-3d',
+        zIndex: liveZIndex,
       }}
       onClick={() => {
-        if (isDraggingRef.current) return;
+        if (didDragRef.current) return;
         if (!isActive) onSelect();
         else onInspect();
       }}
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
-      className={`absolute cursor-pointer select-none hw-accel will-change-transform flex flex-col items-center group ${
-        absOffset > 1 ? 'pointer-events-none' : 'pointer-events-auto'
-      }`}
+      className="absolute cursor-pointer select-none will-change-transform backface-hidden flex flex-col items-center group"
     >
-      {/* 3D TILT CONTAINER FOR PHONE BODY */}
-      <motion.div
-        style={isActive && !lowSpec ? { rotateX, rotateY } : undefined}
-        className="relative transform-gpu flex flex-col items-center"
-      >
-        {/* Deep Space Aura Behind Phone */}
+      <div className="relative flex flex-col items-center">
+        {/* Lightweight Soft Aura (Pre-blended radial gradient, zero CSS filter blur) */}
         <div
-          className={`absolute -inset-6 sm:-inset-10 rounded-[3.5rem] pointer-events-none transition-all duration-700 ${
-            isActive ? 'opacity-70 scale-105' : 'opacity-15 scale-90'
+          className={`absolute -inset-4 sm:-inset-7 rounded-[3rem] pointer-events-none transition-opacity duration-300 ${
+            isActive ? 'opacity-75' : 'opacity-10'
           }`}
           style={{
-            background: `radial-gradient(circle, ${app.glowColor} 0%, transparent 68%)`,
+            background: `radial-gradient(ellipse at center, ${app.glowColor} 0%, transparent 66%)`,
           }}
         />
 
-        {/* --- PHYSICAL SMARTPHONE GLASS BODY (ULTRA-SLIM TITANIUM BEZEL, 100% NOTCHLESS) --- */}
+        {/* --- PHYSICAL SMARTPHONE GLASS BODY (ULTRA-SLIM TITANIUM BEZEL, ZERO BLUR-SHADOW LAG) --- */}
         <div
-          className={`relative aspect-[9/19.5] w-[220px] xs:w-[250px] sm:w-[285px] md:w-[315px] lg:w-[335px] rounded-[2.4rem] sm:rounded-[3rem] pt-[2px] sm:pt-[2.5px] pb-[5px] sm:pb-[6px] px-[4px] sm:px-[5px] transition-all duration-500 ${
+          className={`relative aspect-[9/19.5] w-[216px] xs:w-[244px] sm:w-[280px] md:w-[308px] lg:w-[325px] rounded-[2.4rem] sm:rounded-[3rem] pt-[2px] sm:pt-[2.5px] pb-[5px] sm:pb-[6px] px-[4px] sm:px-[5px] transition-colors duration-300 ${
             isLight
               ? isActive
-                ? 'bg-gradient-to-b from-[#e5e5eb] via-[#d6d6df] to-[#c2c2ce] border-[1.5px] border-black/20 shadow-[0_25px_60px_rgba(0,0,0,0.18)]'
-                : 'bg-gradient-to-b from-[#e5e5eb] via-[#d6d6df] to-[#c2c2ce] border-[1px] border-black/10 opacity-70'
+                ? 'bg-gradient-to-b from-[#ebebf2] via-[#d8d8e2] to-[#c0c0ce] border-[1.5px] border-black/25'
+                : 'bg-gradient-to-b from-[#e5e5eb] via-[#d6d6df] to-[#c2c2ce] border-[1px] border-black/15'
               : isActive
-              ? 'bg-gradient-to-b from-[#32323f] via-[#1a1a24] to-[#0c0c12] border-[1.5px] border-white/30 shadow-[0_30px_90px_rgba(0,0,0,0.95)]'
-              : 'bg-gradient-to-b from-[#20202a] via-[#101016] to-[#08080c] border-[1px] border-white/15 opacity-70'
+              ? 'bg-gradient-to-b from-[#3c3c4b] via-[#1c1c27] to-[#0b0b12] border-[1.5px] border-white/35'
+              : 'bg-gradient-to-b from-[#23232e] via-[#121219] to-[#08080c] border-[1px] border-white/15'
           }`}
         >
           {/* Side Hardware Buttons on Phone Frame */}
@@ -557,9 +553,16 @@ function SpacePhoneGlassTile({
               <PhoneStatusBar app={app} />
             </div>
 
-            {/* Specular Curved Glass Glare Sheen */}
+            {/* Crisp Edge Specular Sheen */}
             <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.08] to-transparent pointer-events-none z-20" />
-            <div className="absolute inset-0 rounded-t-[2.25rem] sm:rounded-t-[2.85rem] rounded-b-[2.1rem] sm:rounded-b-[2.65rem] ring-1 ring-inset ring-white/15 pointer-events-none z-20" />
+            <div
+              className="absolute inset-0 rounded-t-[2.25rem] sm:rounded-t-[2.85rem] rounded-b-[2.1rem] sm:rounded-b-[2.65rem] pointer-events-none z-20"
+              style={{
+                boxShadow: isActive
+                  ? `inset 0 0 0 1px ${app.baseColor}55`
+                  : 'inset 0 0 0 1px rgba(255,255,255,0.12)',
+              }}
+            />
 
             {/* SCREEN CONTENT: APP PHOTO FILLING SCREEN DIRECTLY UNDER STATUS BAR */}
             {app.image ? (
@@ -567,19 +570,25 @@ function SpacePhoneGlassTile({
                 <img
                   src={app.image}
                   alt={app.name}
-                  loading="lazy"
+                  loading="eager"
                   decoding="async"
                   draggable={false}
-                  className="w-full h-full object-cover object-top select-none pointer-events-none transition-transform duration-700 group-hover:scale-105"
+                  className="w-full h-full object-cover object-top select-none pointer-events-none"
                 />
 
                 {/* Subtle bottom gradient to highlight phone bottom */}
                 <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10" />
               </div>
             ) : (
-              /* Futuristic Stealth UI Screen for Classified Build */
+              /* Futuristic Stealth UI Screen for Classified Build / APK without screenshot */
               <div className="flex-1 w-full relative overflow-hidden bg-[#050508] flex flex-col items-center justify-center p-6 text-center select-none">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,251,0,0.15)_0%,transparent_75%)]" />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: `radial-gradient(circle at center, ${app.glowColor} 0%, transparent 75%)`,
+                    opacity: 0.25,
+                  }}
+                />
                 <div
                   className="absolute inset-0 opacity-15"
                   style={{
@@ -590,51 +599,78 @@ function SpacePhoneGlassTile({
                 />
 
                 <div className="relative z-10 flex flex-col items-center">
-                  <div className="w-14 h-14 rounded-full border border-[#fffb00]/40 flex items-center justify-center mb-3 bg-[#fffb00]/10 shadow-[0_0_25px_rgba(255,251,0,0.3)]">
-                    <Lock className="w-6 h-6 text-[#fffb00] animate-pulse" />
+                  <div
+                    className="w-14 h-14 rounded-full border flex items-center justify-center mb-3"
+                    style={{
+                      borderColor: `${app.baseColor}66`,
+                      backgroundColor: `${app.baseColor}18`,
+                    }}
+                  >
+                    {app.apkData ? (
+                      <Smartphone className="w-6 h-6" style={{ color: app.baseColor }} />
+                    ) : (
+                      <Lock className="w-6 h-6 text-[#fffb00]" />
+                    )}
                   </div>
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.3em] text-[#fffb00]">
-                    CLASSIFIED
+                  <span
+                    className="text-[10px] font-mono font-bold uppercase tracking-[0.3em]"
+                    style={{ color: app.baseColor }}
+                  >
+                    {app.apkData ? app.apkData.version : 'CLASSIFIED'}
                   </span>
                   <span className="text-[9px] font-mono tracking-widest text-zinc-400 mt-1 uppercase">
-                    PROTOCOL 03 // RESTRICTED
+                    {app.apkData ? `${app.apkData.apkSize} // APK BUILD` : 'PROTOCOL 03 // RESTRICTED'}
                   </span>
-                  <div className="mt-4 px-3 py-1 rounded border border-[#fffb00]/20 bg-black/60 text-[8px] font-mono tracking-widest text-zinc-300">
-                    TAP TO DECRYPT
+                  <div
+                    className="mt-4 px-3 py-1 rounded border bg-black/75 text-[8px] font-mono tracking-widest text-zinc-300"
+                    style={{ borderColor: `${app.baseColor}33` }}
+                  >
+                    {app.apkData ? 'TAP TO DOWNLOAD APK' : 'TAP TO DECRYPT'}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Bottom Home Indicator Bar */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-24 sm:w-28 h-1 bg-white/70 backdrop-blur-md rounded-full z-30 pointer-events-none shadow-[0_1px_3px_rgba(0,0,0,0.6)]" />
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-24 sm:w-28 h-1 bg-white/80 rounded-full z-30 pointer-events-none" />
 
-            {/* Tap to Open Hover Pill Overlay on Center Phone */}
+            {/* Tap to Open / APK CTA Pill Overlay on Center Phone */}
             {isActive && (
               <div className="absolute inset-x-0 bottom-6 z-30 flex justify-center pointer-events-none">
                 <div
-                  className="px-3.5 py-1.5 rounded-full backdrop-blur-xl border border-white/30 text-white flex items-center gap-2 shadow-2xl transition-all duration-300 group-hover:scale-105"
-                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)' }}
+                  className="px-3.5 py-1.5 rounded-full border bg-[#050509]/92 text-white flex items-center gap-2"
+                  style={{ borderColor: `${app.baseColor}55` }}
                 >
-                  <Sparkles className="w-3 h-3 text-[#00ffd5] animate-spin" />
-                  <span className="text-[9px] font-mono font-bold tracking-[0.25em] uppercase">
-                    TAP FOR DETAILS
-                  </span>
+                  {app.apkData ? (
+                    <>
+                      <Download className="w-3 h-3" style={{ color: app.baseColor }} />
+                      <span className="text-[9px] font-mono font-bold tracking-[0.22em] uppercase">
+                        APK READY · TAP PHONE
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3 h-3" style={{ color: app.baseColor }} />
+                      <span className="text-[9px] font-mono font-bold tracking-[0.25em] uppercase">
+                        TAP FOR DETAILS
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Minimal Under-Phone Floating Title (Clean, no boxes) */}
+        {/* Minimal Under-Phone Floating Title */}
         <div className="mt-4 flex flex-col items-center text-center pointer-events-none">
           <div className="flex items-center gap-2">
             <span
-              className="w-1.5 h-1.5 rounded-full animate-ping"
+              className="w-1.5 h-1.5 rounded-full"
               style={{ backgroundColor: app.baseColor }}
             />
             <span
-              className={`font-display font-black text-sm sm:text-base tracking-wider uppercase drop-shadow ${
+              className={`font-display font-black text-sm sm:text-base tracking-wider uppercase ${
                 isLight ? 'text-zinc-900' : 'text-white'
               }`}
             >
@@ -645,10 +681,10 @@ function SpacePhoneGlassTile({
             className="text-[9px] font-mono uppercase tracking-[0.25em] mt-0.5"
             style={{ color: app.baseColor }}
           >
-            {app.tag}
+            {app.apkData ? `${app.tag} · ${app.apkData.version}` : app.tag}
           </span>
         </div>
-      </motion.div>
+      </div>
     </motion.div>
   );
 }
@@ -660,20 +696,134 @@ export default function App() {
   const [lowSpec] = useState<boolean>(() => detectSilentLowSpec());
   const [activeSlide, setActiveSlide] = useState<number>(0);
 
+  // Stealth #admin hash detection (completely invisible on main site)
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && window.location.hash.toLowerCase() === '#admin';
+  });
+
+  // Published APK apps synced from Firestore / local cache
+  const [publishedApks, setPublishedApks] = useState<StoredApkApp[]>(() =>
+    loadCachedApkApps().filter((a) => a.published)
+  );
+  const [downloadingApkId, setDownloadingApkId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+
+  useEffect(() => {
+    const checkHash = () => {
+      setIsAdminRoute(window.location.hash.toLowerCase() === '#admin');
+    };
+    window.addEventListener('hashchange', checkHash);
+    return () => window.removeEventListener('hashchange', checkHash);
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribePublishedApkApps((cloudApps) => {
+      setPublishedApks(cloudApps);
+    });
+    return () => unsub();
+  }, []);
+
+  // Merge default apps with any admin-published APK releases
+  const allApps: AppProject[] = useMemo(() => {
+    const merged = defaultApps.map((baseApp) => {
+      const matchedApk = publishedApks.find(
+        (apk) =>
+          apk.id === baseApp.id ||
+          apk.name.toLowerCase() === baseApp.name.toLowerCase()
+      );
+      if (!matchedApk) return baseApp;
+      return {
+        ...baseApp,
+        desc: matchedApk.desc || baseApp.desc,
+        fullDesc: matchedApk.fullDesc || baseApp.fullDesc,
+        tag: matchedApk.tag || baseApp.tag,
+        image: matchedApk.image || baseApp.image,
+        url: matchedApk.url && matchedApk.url !== '#' ? matchedApk.url : baseApp.url,
+        baseColor: matchedApk.baseColor || baseApp.baseColor,
+        glowColor: `${matchedApk.baseColor || baseApp.baseColor}66`,
+        features: matchedApk.features?.length ? matchedApk.features : baseApp.features,
+        tech: matchedApk.tech?.length ? matchedApk.tech : baseApp.tech,
+        apkData: matchedApk,
+      };
+    });
+
+    // Append any custom standalone APK apps added in #admin
+    const customApks = publishedApks.filter(
+      (apk) =>
+        !defaultApps.some(
+          (b) => b.id === apk.id || b.name.toLowerCase() === apk.name.toLowerCase()
+        )
+    );
+
+    customApks.forEach((apk, idx) => {
+      const numStr = String(merged.length + 1 + idx).padStart(2, '0');
+      merged.push({
+        id: apk.id,
+        name: apk.name,
+        desc: apk.desc,
+        fullDesc: apk.fullDesc,
+        tag: apk.tag || 'Android APK',
+        icon: <Smartphone className="w-4 h-4" />,
+        image: apk.image || undefined,
+        url: apk.url || '#',
+        number: numStr,
+        iconColor: 'text-[#00ffd5]',
+        baseColor: apk.baseColor || '#00ffd5',
+        gradient: 'from-[#00ffd5] to-[#ff00c8]',
+        glowColor: `${apk.baseColor || '#00ffd5'}66`,
+        features: apk.features,
+        tech: apk.tech,
+        apkData: apk,
+      });
+    });
+
+    return merged;
+  }, [publishedApks]);
+
   const spaceSectionRef = useRef<HTMLElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const isShowcaseInView = useInView(spaceSectionRef, {
     margin: '-60px 0px -80px 0px',
     amount: 0.15,
   });
   const spaceIntensityRef = useRef<number>(0);
-  const activeColorRef = useRef<string>(myApps[0].baseColor);
-  const isDraggingRef = useRef<boolean>(false);
-  const dragOffset = useMotionValue(0);
-  const smoothDragOffset = useSpring(dragOffset, {
-    stiffness: 550,
-    damping: 40,
-    mass: 0.22,
+  const activeColorRef = useRef<string>(defaultApps[0].baseColor);
+
+  // Responsive pixel spread for single-matrix 3D transforms
+  const [spreadPx, setSpreadPx] = useState<number>(() => {
+    if (typeof window === 'undefined') return 220;
+    const w = window.innerWidth;
+    if (w < 420) return 158;
+    if (w < 640) return 182;
+    if (w < 1024) return 225;
+    return 265;
   });
+
+  useEffect(() => {
+    const updateSpread = () => {
+      const w = window.innerWidth;
+      if (w < 420) setSpreadPx(158);
+      else if (w < 640) setSpreadPx(182);
+      else if (w < 1024) setSpreadPx(225);
+      else setSpreadPx(265);
+    };
+    window.addEventListener('resize', updateSpread, { passive: true });
+    return () => window.removeEventListener('resize', updateSpread);
+  }, []);
+
+  // Unified Continuous Virtual Index for Peak 60/120FPS 3D Phone Viewer
+  const virtualIndex = useMotionValue(0);
+  const isDraggingRef = useRef<boolean>(false);
+  const didDragRef = useRef<boolean>(false);
+  const pointerDownXRef = useRef<number>(0);
+  const pointerDownYRef = useRef<number>(0);
+  const dragStartVirtualRef = useRef<number>(0);
+  const lastMoveTimeRef = useRef<number>(0);
+  const lastMoveXRef = useRef<number>(0);
+  const velocityXRef = useRef<number>(0);
+  const isHorizontalSwipeRef = useRef<boolean | null>(null);
+  const spreadRef = useRef<number>(spreadPx);
+  spreadRef.current = spreadPx;
 
   const { scrollYProgress } = useScroll();
 
@@ -685,17 +835,187 @@ export default function App() {
   const ringScale = useTransform(scrollYProgress, [0, 0.5, 1], [1, 1.25, 0.9]);
   const ringRotate = useTransform(scrollYProgress, [0, 1], [0, 180]);
 
-  // Accelerate space stars when showcase is in view
+  const safeSlideIndex = ((activeSlide % allApps.length) + allApps.length) % allApps.length;
+  const currentActiveApp = allApps[safeSlideIndex] || allApps[0];
+
   useEffect(() => {
     spaceIntensityRef.current = isShowcaseInView ? 1 : 0.2;
-    activeColorRef.current = myApps[activeSlide].baseColor;
-  }, [isShowcaseInView, activeSlide]);
+    activeColorRef.current = currentActiveApp.baseColor;
+  }, [isShowcaseInView, currentActiveApp]);
 
-  const selectSlideManual = (index: number) => {
-    const total = myApps.length;
-    const nextIdx = ((index % total) + total) % total;
-    setActiveSlide(nextIdx);
-    activeColorRef.current = myApps[nextIdx].baseColor;
+  // Animate virtualIndex smoothly to target index with incoming momentum
+  const selectSlideManual = useCallback(
+    (targetIdx: number, swipeVelocityPx = 0) => {
+      const total = allApps.length;
+      if (total <= 0) return;
+      const normalizedTarget = ((targetIdx % total) + total) % total;
+      const currentV = virtualIndex.get();
+      const currentMod = ((currentV % total) + total) % total;
+      let delta = normalizedTarget - currentMod;
+      if (delta > total / 2) delta -= total;
+      if (delta < -total / 2) delta += total;
+
+      const nextVirtual = Math.round(currentV + delta);
+      setActiveSlide(normalizedTarget);
+      activeColorRef.current = allApps[normalizedTarget].baseColor;
+
+      const clampedVel = Math.max(-1800, Math.min(1800, swipeVelocityPx));
+      animate(virtualIndex, nextVirtual, {
+        type: 'spring',
+        stiffness: 290,
+        damping: 30,
+        mass: 0.48,
+        velocity: clampedVel ? -clampedVel / spreadRef.current : 0,
+      });
+    },
+    [allApps, virtualIndex]
+  );
+
+  const settleSwipe = useCallback(
+    (dx: number, vx: number) => {
+      if (isHorizontalSwipeRef.current !== false && (Math.abs(dx) > 22 || Math.abs(vx) > 90)) {
+        if (dx < -22 || vx < -90) {
+          selectSlideManual(safeSlideIndex + 1, vx);
+        } else if (dx > 22 || vx > 90) {
+          selectSlideManual(safeSlideIndex - 1, vx);
+        } else {
+          selectSlideManual(safeSlideIndex, 0);
+        }
+      } else {
+        selectSlideManual(safeSlideIndex, 0);
+      }
+      setTimeout(() => {
+        didDragRef.current = false;
+      }, 65);
+    },
+    [safeSlideIndex, selectSlideManual]
+  );
+
+  // Native non-passive touch listeners so budget Android browsers never cancel horizontal swipes
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      virtualIndex.stop();
+      const t = e.touches[0];
+      isDraggingRef.current = true;
+      didDragRef.current = false;
+      isHorizontalSwipeRef.current = null;
+      pointerDownXRef.current = t.clientX;
+      pointerDownYRef.current = t.clientY;
+      lastMoveXRef.current = t.clientX;
+      lastMoveTimeRef.current = performance.now();
+      velocityXRef.current = 0;
+      dragStartVirtualRef.current = virtualIndex.get();
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - pointerDownXRef.current;
+      const dy = t.clientY - pointerDownYRef.current;
+
+      if (isHorizontalSwipeRef.current === null) {
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+          isHorizontalSwipeRef.current = Math.abs(dx) >= Math.abs(dy) * 0.85;
+        }
+      }
+
+      if (isHorizontalSwipeRef.current === false) return;
+
+      // Lock horizontal swipe so Chrome/Safari stays 100% responsive with zero gesture hijack
+      if (isHorizontalSwipeRef.current === true && e.cancelable) {
+        e.preventDefault();
+      }
+
+      if (Math.abs(dx) > 5) {
+        didDragRef.current = true;
+      }
+
+      const now = performance.now();
+      const dt = Math.max(1, now - lastMoveTimeRef.current);
+      const instantVx = ((t.clientX - lastMoveXRef.current) / dt) * 1000;
+      // Exponential smoothing avoids wild velocity spikes on cheap digitizers
+      velocityXRef.current = velocityXRef.current * 0.55 + instantVx * 0.45;
+      lastMoveXRef.current = t.clientX;
+      lastMoveTimeRef.current = now;
+
+      virtualIndex.set(dragStartVirtualRef.current - dx / spreadRef.current);
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      const t = e.changedTouches[0];
+      const dx = t ? t.clientX - pointerDownXRef.current : 0;
+      settleSwipe(dx, velocityXRef.current);
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [settleSwipe, virtualIndex]);
+
+  // Mouse / trackpad pointer handlers with pointer capture (touch handled natively above)
+  const handleStagePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch' || (e.button !== 0 && e.pointerType === 'mouse')) return;
+    virtualIndex.stop();
+    isDraggingRef.current = true;
+    didDragRef.current = false;
+    isHorizontalSwipeRef.current = true;
+    pointerDownXRef.current = e.clientX;
+    pointerDownYRef.current = e.clientY;
+    lastMoveXRef.current = e.clientX;
+    lastMoveTimeRef.current = performance.now();
+    velocityXRef.current = 0;
+    dragStartVirtualRef.current = virtualIndex.get();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore if unsupported
+    }
+  };
+
+  const handleStagePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || e.pointerType === 'touch') return;
+    const dx = e.clientX - pointerDownXRef.current;
+
+    if (Math.abs(dx) > 5) {
+      didDragRef.current = true;
+    }
+
+    const now = performance.now();
+    const dt = Math.max(1, now - lastMoveTimeRef.current);
+    const instantVx = ((e.clientX - lastMoveXRef.current) / dt) * 1000;
+    velocityXRef.current = velocityXRef.current * 0.55 + instantVx * 0.45;
+    lastMoveXRef.current = e.clientX;
+    lastMoveTimeRef.current = now;
+
+    virtualIndex.set(dragStartVirtualRef.current - dx / spreadRef.current);
+  };
+
+  const handleStagePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || e.pointerType === 'touch') return;
+    isDraggingRef.current = false;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      // ignore
+    }
+    const dx = e.clientX - pointerDownXRef.current;
+    settleSwipe(dx, velocityXRef.current);
   };
 
   useEffect(() => {
@@ -707,9 +1027,9 @@ export default function App() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setActiveApp(null);
-      if (!activeApp) {
-        if (e.key === 'ArrowRight') selectSlideManual(activeSlide + 1);
-        if (e.key === 'ArrowLeft') selectSlideManual(activeSlide - 1);
+      if (!activeApp && !isAdminRoute) {
+        if (e.key === 'ArrowRight') selectSlideManual(safeSlideIndex + 1);
+        if (e.key === 'ArrowLeft') selectSlideManual(safeSlideIndex - 1);
       }
     };
 
@@ -719,7 +1039,7 @@ export default function App() {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [lowSpec, pointerX, pointerY, activeApp, activeSlide]);
+  }, [lowSpec, pointerX, pointerY, activeApp, isAdminRoute, safeSlideIndex, selectSlideManual]);
 
   useEffect(() => {
     document.body.style.overflow = activeApp ? 'hidden' : 'unset';
@@ -733,6 +1053,39 @@ export default function App() {
     document.body.style.color = isLight ? '#09090b' : '#fff';
   }, [isLight]);
 
+  const handleDownloadApkFromModal = async (apk: StoredApkApp) => {
+    setDownloadingApkId(apk.id);
+    setDownloadProgress(10);
+    try {
+      await triggerApkDownload(apk, (pct) => setDownloadProgress(pct));
+    } finally {
+      setTimeout(() => {
+        setDownloadingApkId(null);
+        setDownloadProgress(0);
+      }, 900);
+    }
+  };
+
+  // --- STEALTH #admin ROUTE (ONLY ACCESSIBLE BY TYPING #admin IN URL) ---
+  if (isAdminRoute) {
+    return (
+      <AdminPanel
+        isLight={isLight}
+        onExitAdmin={() => {
+          window.history.pushState(
+            '',
+            document.title,
+            window.location.pathname + window.location.search
+          );
+          setIsAdminRoute(false);
+        }}
+        onAppsChanged={() => {
+          setPublishedApks(loadCachedApkApps().filter((a) => a.published));
+        }}
+      />
+    );
+  }
+
   return (
     <div
       className={`min-h-[100dvh] font-sans selection:bg-[#00d5ff]/30 relative overflow-x-hidden transition-colors duration-500 ${
@@ -745,6 +1098,7 @@ export default function App() {
         lowSpec={lowSpec}
         spaceIntensityRef={spaceIntensityRef}
         activeColorRef={activeColorRef}
+        isDraggingRef={isDraggingRef}
       />
 
       {/* --- MINIMAL AMBIENT ORBITAL GEOMETRY --- */}
@@ -754,11 +1108,11 @@ export default function App() {
           className="absolute inset-0 flex items-center justify-center transform-gpu"
         >
           <div
-            className="w-[75vmin] h-[75vmin] max-w-[640px] max-h-[640px] rounded-full transition-all duration-700"
+            className="w-[75vmin] h-[75vmin] max-w-[640px] max-h-[640px] rounded-full transition-opacity duration-700"
             style={{
               background: isLight
                 ? 'radial-gradient(circle, rgba(0,213,255,0.16) 0%, rgba(255,0,123,0.1) 45%, transparent 70%)'
-                : `radial-gradient(circle, ${myApps[activeSlide].glowColor} 0%, rgba(0,213,255,0.1) 48%, transparent 72%)`,
+                : `radial-gradient(circle, ${currentActiveApp.glowColor} 0%, rgba(0,213,255,0.1) 48%, transparent 72%)`,
             }}
           />
         </motion.div>
@@ -768,11 +1122,13 @@ export default function App() {
           className="absolute inset-0 flex items-center justify-center transform-gpu"
         >
           <div
+            style={lowSpec && isShowcaseInView ? { animationPlayState: 'paused' } : undefined}
             className={`w-[82vmin] h-[82vmin] max-w-[720px] max-h-[720px] rounded-full border border-dashed animate-orbit-cw ${
               isLight ? 'border-black/[0.08]' : 'border-white/[0.08]'
             }`}
           />
           <div
+            style={lowSpec && isShowcaseInView ? { animationPlayState: 'paused' } : undefined}
             className={`absolute w-[56vmin] h-[56vmin] max-w-[480px] max-h-[480px] rounded-full border animate-orbit-ccw ${
               isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'
             }`}
@@ -808,7 +1164,7 @@ export default function App() {
                   : 'bg-[#07070c]/90 border-white/15 text-white god-border'
               }`}
             >
-              <Diamond className="w-3 h-3 shrink-0 fill-[#00ffd5] text-[#00ffd5] animate-pulse" />
+              <Diamond className="w-3 h-3 shrink-0 fill-[#00ffd5] text-[#00ffd5]" />
               <span>OWNER_OFFICIAL</span>
             </span>
           </motion.a>
@@ -955,11 +1311,11 @@ export default function App() {
             <span className="text-[9px] uppercase tracking-[0.35em] font-semibold">
               Explore Showcase
             </span>
-            <div className="w-[1px] h-7 bg-gradient-to-b from-[#00ffd5] to-transparent animate-pulse" />
+            <div className="w-[1px] h-7 bg-gradient-to-b from-[#00ffd5] to-transparent" />
           </motion.a>
         </section>
 
-        {/* --- 3D DEEP SPACE ASSET SHOWCASE (ZERO EXCESS GAP, PURE GLASS PHONE TILES) --- */}
+        {/* --- 3D DEEP SPACE ASSET SHOWCASE (120FPS BUTTER-SMOOTH SLIDER ON ALL PHONES) --- */}
         <section
           id="work"
           ref={spaceSectionRef}
@@ -980,71 +1336,55 @@ export default function App() {
               </h2>
             </div>
 
-            {/* 3D Perspective Stage for Pure Glass Phone Tiles with Buttery Smooth Gestures */}
-            <motion.div
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.24}
-              onDragStart={() => {
-                isDraggingRef.current = true;
-              }}
-              onDrag={(_e, info) => {
-                if (Math.abs(info.offset.x) > 4) {
-                  isDraggingRef.current = true;
-                }
-                dragOffset.set(info.offset.x);
-              }}
-              onDragEnd={(_e, info) => {
-                const swipeThreshold = 25;
-                const velocityThreshold = 100;
-                if (info.offset.x < -swipeThreshold || info.velocity.x < -velocityThreshold) {
-                  selectSlideManual(activeSlide + 1);
-                } else if (info.offset.x > swipeThreshold || info.velocity.x > velocityThreshold) {
-                  selectSlideManual(activeSlide - 1);
-                }
-                // Silky spring release back to 0 with zero snap
-                animate(dragOffset, 0, {
-                  type: 'spring',
-                  stiffness: 420,
-                  damping: 34,
-                  mass: 0.35,
-                });
-                setTimeout(() => {
-                  isDraggingRef.current = false;
-                }, 100);
-              }}
-              className="relative w-full h-[520px] xs:h-[570px] sm:h-[630px] md:h-[680px] flex items-center justify-center scene-3d my-2 cursor-grab active:cursor-grabbing touch-pan-y select-none will-change-transform"
+            {/* 3D Perspective Stage with Zero-Overhead Single-Matrix GPU Rendering */}
+            <div
+              ref={stageRef}
+              onPointerDown={handleStagePointerDown}
+              onPointerMove={handleStagePointerMove}
+              onPointerUp={handleStagePointerUp}
+              onPointerCancel={handleStagePointerUp}
+              className="relative w-full h-[505px] xs:h-[550px] sm:h-[615px] md:h-[660px] flex items-center justify-center my-2 cursor-grab active:cursor-grabbing touch-pan-y select-none"
             >
-              {myApps.map((app, index) => {
-                // Calculate shortest circular offset for 3 items
-                const total = myApps.length;
-                let offset = ((index - activeSlide) % total);
-                if (offset > total / 2) offset -= total;
-                if (offset < -total / 2) offset += total;
+              {/* Sleek Keynote 3D Stage Floor Pedestal Glow (Pure gradient, 0px CSS blur = zero GPU lag) */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-10 sm:bottom-12 left-1/2 -translate-x-1/2 w-[260px] sm:w-[340px] h-[34px] rounded-[100%] transition-colors duration-300"
+                style={{
+                  background: `radial-gradient(ellipse at center, ${currentActiveApp.baseColor}42 0%, ${currentActiveApp.baseColor}14 48%, transparent 74%)`,
+                }}
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-12 sm:bottom-14 left-1/2 -translate-x-1/2 w-[210px] sm:w-[270px] h-[16px] rounded-[100%] border opacity-35 transition-colors duration-300"
+                style={{
+                  borderColor: currentActiveApp.baseColor,
+                }}
+              />
 
-                return (
-                  <SpacePhoneGlassTile
-                    key={app.name}
-                    app={app}
-                    offset={offset}
-                    isActive={index === activeSlide}
-                    onSelect={() => selectSlideManual(index)}
-                    onInspect={() => setActiveApp(app)}
-                    isLight={isLight}
-                    lowSpec={lowSpec}
-                    isDraggingRef={isDraggingRef}
-                    dragOffset={smoothDragOffset}
-                  />
-                );
-              })}
-            </motion.div>
+              {allApps.map((app, index) => (
+                <SpacePhoneGlassTile
+                  key={app.id || app.name}
+                  app={app}
+                  index={index}
+                  total={allApps.length}
+                  isActive={index === safeSlideIndex}
+                  onSelect={() => selectSlideManual(index)}
+                  onInspect={() => setActiveApp(app)}
+                  isLight={isLight}
+                  lowSpec={lowSpec}
+                  spreadPx={spreadPx}
+                  didDragRef={didDragRef}
+                  virtualIndex={virtualIndex}
+                />
+              ))}
+            </div>
 
             {/* Infinite Slider Controls */}
             <div className="z-20 mt-4 flex flex-col items-center gap-3">
               <div className="flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => selectSlideManual(activeSlide - 1)}
+                  onClick={() => selectSlideManual(safeSlideIndex - 1)}
                   aria-label="Previous asset"
                   className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all duration-300 active:scale-90 cursor-pointer ${
                     isLight
@@ -1057,9 +1397,9 @@ export default function App() {
 
                 {/* Minimal Paginated Dots */}
                 <div className="flex items-center gap-2.5">
-                  {myApps.map((app, i) => (
+                  {allApps.map((app, i) => (
                     <button
-                      key={app.name}
+                      key={app.id || app.name}
                       type="button"
                       onClick={() => selectSlideManual(i)}
                       aria-label={`Select ${app.name}`}
@@ -1067,11 +1407,11 @@ export default function App() {
                     >
                       <div
                         className={`h-1.5 rounded-full transition-all duration-300 ${
-                          i === activeSlide ? 'w-8' : 'w-2 opacity-35'
+                          i === safeSlideIndex ? 'w-8' : 'w-2 opacity-35'
                         }`}
                         style={{
                           backgroundColor:
-                            i === activeSlide
+                            i === safeSlideIndex
                               ? app.baseColor
                               : isLight
                               ? '#18181b'
@@ -1084,7 +1424,7 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => selectSlideManual(activeSlide + 1)}
+                  onClick={() => selectSlideManual(safeSlideIndex + 1)}
                   aria-label="Next asset"
                   className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all duration-300 active:scale-90 cursor-pointer ${
                     isLight
@@ -1101,7 +1441,7 @@ export default function App() {
                   isLight ? 'text-zinc-500' : 'text-zinc-400'
                 }`}
               >
-                Swipe or click phone to view details
+                Swipe or tap phone to view details & APK
               </span>
             </div>
           </div>
@@ -1275,11 +1615,11 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
+            transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-6 lg:p-12 pointer-events-auto transform-gpu"
           >
             <div
-              className={`absolute inset-0 backdrop-blur-2xl transition-colors duration-300 ${
+              className={`absolute inset-0 backdrop-blur-xl transition-colors duration-300 ${
                 isLight ? 'bg-zinc-900/45' : 'bg-[#000]/85'
               }`}
               onClick={() => setActiveApp(null)}
@@ -1289,7 +1629,7 @@ export default function App() {
               initial={{ y: 40, opacity: 0, scale: 0.96 }}
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: 30, opacity: 0, scale: 0.96 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 26 }}
+              transition={{ type: 'spring', stiffness: 280, damping: 28 }}
               className={`w-full h-[92dvh] md:h-[86vh] md:max-h-[840px] md:max-w-5xl border-t md:border overflow-y-auto md:overflow-hidden relative z-10 flex flex-col md:flex-row rounded-t-3xl md:rounded-3xl transition-colors duration-300 transform-gpu custom-scrollbar ${
                 isLight
                   ? 'bg-white border-black/10 shadow-2xl'
@@ -1305,7 +1645,7 @@ export default function App() {
                 }`}
               >
                 <span className="text-xs font-mono font-bold" style={{ color: activeApp.baseColor }}>
-                  {activeApp.number} // {activeApp.tag}
+                  {activeApp.number} · {activeApp.tag}
                 </span>
                 <button
                   onClick={() => setActiveApp(null)}
@@ -1341,15 +1681,17 @@ export default function App() {
               >
                 <div
                   className="absolute -inset-10 opacity-35 pointer-events-none"
-                  style={{ background: `radial-gradient(circle, ${activeApp.glowColor} 0%, transparent 70%)` }}
+                  style={{
+                    background: `radial-gradient(circle, ${activeApp.glowColor} 0%, transparent 70%)`,
+                  }}
                 />
 
                 {/* Smartphone Silhouette in Modal (100% Notchless, Ultra-Sleek) */}
                 <div
-                  className={`relative aspect-[9/19.5] w-[200px] sm:w-[230px] md:w-[250px] rounded-[2.3rem] sm:rounded-[2.7rem] pt-[2px] sm:pt-[2.5px] pb-[5px] sm:pb-[6px] px-[4px] sm:px-[5px] transition-all duration-300 shadow-2xl ${
+                  className={`relative aspect-[9/19.5] w-[200px] sm:w-[230px] md:w-[250px] rounded-[2.3rem] sm:rounded-[2.7rem] pt-[2px] sm:pt-[2.5px] pb-[5px] sm:pb-[6px] px-[4px] sm:px-[5px] shadow-2xl ${
                     isLight
-                      ? 'bg-gradient-to-b from-[#e5e5eb] via-[#d6d6df] to-[#c2c2ce] border-[1.5px] border-black/15 shadow-[0_20px_50px_rgba(0,0,0,0.15)]'
-                      : 'bg-gradient-to-b from-[#32323f] via-[#1a1a24] to-[#0c0c12] border-[1.5px] border-white/25 shadow-[0_20px_50px_rgba(0,0,0,0.8)]'
+                      ? 'bg-gradient-to-b from-[#e5e5eb] via-[#d6d6df] to-[#c2c2ce] border-[1.5px] border-black/15'
+                      : 'bg-gradient-to-b from-[#32323f] via-[#1a1a24] to-[#0c0c12] border-[1.5px] border-white/25'
                   }`}
                 >
                   {/* Phone Hardware Chassis Buttons */}
@@ -1369,19 +1711,18 @@ export default function App() {
                           alt={activeApp.name}
                           className="w-full h-full object-cover object-top select-none pointer-events-none"
                         />
-                        {/* Subtle bottom gradient to highlight phone bottom */}
                         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10" />
                       </div>
                     ) : (
                       <div className="flex-1 w-full flex flex-col items-center justify-center p-4 bg-[#060609]">
-                        <Lock className="w-7 h-7 text-[#fffb00] animate-pulse mb-2" />
+                        <Lock className="w-7 h-7 text-[#fffb00] mb-2" />
                         <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-[#fffb00]">
                           RESTRICTED ACCESS
                         </span>
                       </div>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.08] to-transparent pointer-events-none z-20" />
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-20 sm:w-24 h-1 bg-white/70 backdrop-blur-md rounded-full z-30 pointer-events-none shadow-[0_1px_3px_rgba(0,0,0,0.6)]" />
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-20 sm:w-24 h-1 bg-white/75 rounded-full z-30 pointer-events-none" />
                   </div>
                 </div>
               </div>
@@ -1394,15 +1735,23 @@ export default function App() {
               >
                 <div className="hidden md:flex items-center gap-3 mb-5">
                   <span
-                    className={`text-xs font-bold uppercase tracking-[0.2em] px-3.5 py-1.5 border rounded-full ${
-                      activeApp.iconColor
-                    } ${isLight ? 'bg-black/5 border-black/5' : 'bg-white/5 border-white/10'}`}
+                    className="text-xs font-bold uppercase tracking-[0.2em]"
+                    style={{ color: activeApp.baseColor }}
                   >
                     {activeApp.tag}
                   </span>
+                  <span className="text-zinc-500">·</span>
                   <span className="text-xs font-mono font-bold text-zinc-500">
-                    ID // {activeApp.number}
+                    ID {activeApp.number}
                   </span>
+                  {activeApp.apkData && (
+                    <>
+                      <span className="text-zinc-500">·</span>
+                      <span className="text-xs font-mono text-[#00ffd5]">
+                        {activeApp.apkData.version} ({activeApp.apkData.apkSize})
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 <h3
@@ -1465,43 +1814,67 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Launch & Inquire CTAs */}
-                <div className="mt-auto pt-4 flex flex-col sm:flex-row items-center gap-3">
-                  <a
-                    href={activeApp.url}
-                    target={activeApp.url !== '#' ? '_blank' : undefined}
-                    rel="noopener noreferrer"
-                    className="w-full sm:flex-1 rounded-xl p-[1px] relative group overflow-hidden active:scale-[0.99] transition-all duration-300 god-border"
-                  >
-                    <div
-                      className={`w-full py-3.5 sm:py-4 rounded-xl flex items-center justify-center gap-3 relative z-10 transition-colors ${
+                {/* Download APK & Launch CTAs */}
+                <div className="mt-auto pt-4 flex flex-col gap-3">
+                  {activeApp.apkData && (
+                    <button
+                      type="button"
+                      disabled={downloadingApkId === activeApp.apkData.id}
+                      onClick={() =>
+                        activeApp.apkData && handleDownloadApkFromModal(activeApp.apkData)
+                      }
+                      className="w-full py-4 rounded-xl bg-gradient-to-r from-[#00ffd5] via-[#00d5ff] to-[#ff00c8] text-black font-display font-black text-xs sm:text-sm uppercase tracking-[0.22em] flex items-center justify-center gap-3 shadow-xl hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>
+                        {downloadingApkId === activeApp.apkData.id
+                          ? `Downloading APK (${downloadProgress}%)...`
+                          : `Download APK · ${activeApp.apkData.version} (${activeApp.apkData.apkSize})`}
+                      </span>
+                    </button>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    {activeApp.url && activeApp.url !== '#' && (
+                      <a
+                        href={activeApp.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full sm:flex-1 rounded-xl p-[1px] relative group overflow-hidden active:scale-[0.99] transition-all duration-300 god-border"
+                      >
+                        <div
+                          className={`w-full py-3.5 sm:py-4 rounded-xl flex items-center justify-center gap-3 relative z-10 transition-colors ${
+                            isLight
+                              ? 'bg-zinc-900 text-white hover:bg-black'
+                              : 'bg-[#08080c] hover:bg-black text-white'
+                          }`}
+                        >
+                          <span className="text-xs sm:text-sm uppercase tracking-[0.3em] font-bold z-10">
+                            Launch Web Asset
+                          </span>
+                          <MoveUpRight className="w-4 h-4 z-10" />
+                        </div>
+                      </a>
+                    )}
+
+                    <a
+                      href={`https://wa.me/919034184333?text=Hi%20Somay,%20I%20am%20interested%20in%20your%20app%20${encodeURIComponent(
+                        activeApp.name
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`w-full ${
+                        activeApp.url && activeApp.url !== '#' ? 'sm:w-auto' : 'sm:flex-1'
+                      } px-5 py-3.5 sm:py-4 rounded-xl border flex items-center justify-center gap-2.5 transition-all text-xs font-semibold tracking-wider uppercase active:scale-95 ${
                         isLight
-                          ? 'bg-zinc-900 text-white hover:bg-black'
-                          : 'bg-[#08080c] hover:bg-black text-white'
+                          ? 'border-[#25D366]/40 text-[#128C7E] hover:bg-[#25D366]/10'
+                          : 'border-[#25D366]/40 text-[#25D366] hover:bg-[#25D366]/15'
                       }`}
                     >
-                      <span className="text-xs sm:text-sm uppercase tracking-[0.3em] font-bold z-10">
-                        Launch Asset
-                      </span>
-                      <MoveUpRight className="w-4 h-4 z-10" />
-                    </div>
-                  </a>
-
-                  <a
-                    href={`https://wa.me/919034184333?text=Hi%20Somay,%20I%20am%20interested%20in%20your%20app%20${encodeURIComponent(
-                      activeApp.name
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`w-full sm:w-auto px-5 py-3.5 sm:py-4 rounded-xl border flex items-center justify-center gap-2.5 transition-all text-xs font-semibold tracking-wider uppercase active:scale-95 ${
-                      isLight
-                        ? 'border-[#25D366]/40 text-[#128C7E] hover:bg-[#25D366]/10'
-                        : 'border-[#25D366]/40 text-[#25D366] hover:bg-[#25D366]/15 hover:shadow-[0_0_25px_rgba(37,211,102,0.3)]'
-                    }`}
-                  >
-                    <WhatsAppIcon className="w-4 h-4" />
-                    <span>Inquire</span>
-                  </a>
+                      <WhatsAppIcon className="w-4 h-4" />
+                      <span>Inquire</span>
+                    </a>
+                  </div>
                 </div>
               </div>
             </motion.div>

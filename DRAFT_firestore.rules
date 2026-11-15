@@ -1,0 +1,143 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'officialsomay222@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint: ApkApp
+    function isValidApkApp(data) {
+      return data.keys().hasAll([
+          'name', 'desc', 'fullDesc', 'tag', 'version',
+          'apkFileName', 'apkSize', 'apkUrl', 'image', 'url',
+          'baseColor', 'chunkCount', 'features', 'tech',
+          'ownerId', 'published', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'name', 'desc', 'fullDesc', 'tag', 'version',
+          'apkFileName', 'apkSize', 'apkUrl', 'image', 'url',
+          'baseColor', 'chunkCount', 'features', 'tech',
+          'ownerId', 'published', 'createdAt', 'updatedAt'
+        ]) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.desc is string && data.desc.size() >= 1 && data.desc.size() <= 200 &&
+        data.fullDesc is string && data.fullDesc.size() >= 1 && data.fullDesc.size() <= 1200 &&
+        data.tag is string && data.tag.size() >= 1 && data.tag.size() <= 40 &&
+        data.version is string && data.version.size() >= 1 && data.version.size() <= 30 &&
+        data.apkFileName is string && data.apkFileName.size() >= 1 && data.apkFileName.size() <= 120 &&
+        data.apkSize is string && data.apkSize.size() >= 1 && data.apkSize.size() <= 30 &&
+        data.apkUrl is string && data.apkUrl.size() <= 1000 &&
+        data.image is string && data.image.size() <= 350000 &&
+        data.url is string && data.url.size() <= 500 &&
+        data.baseColor is string && data.baseColor.size() >= 4 && data.baseColor.size() <= 30 && data.baseColor.matches('^#[0-9a-fA-F]{3,8}$') &&
+        data.chunkCount is int && data.chunkCount >= 0 && data.chunkCount <= 40 &&
+        data.features is list && data.features.size() >= 1 && data.features.size() <= 6 && data.features[0] is string && data.features[0].size() <= 120 &&
+        data.tech is list && data.tech.size() >= 1 && data.tech.size() <= 6 && data.tech[0] is string && data.tech[0].size() <= 60 &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.ownerId == request.auth.uid &&
+        data.published is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: ApkChunk
+    function isValidApkChunk(data) {
+      return data.keys().hasAll(['appId', 'index', 'data', 'ownerId', 'createdAt']) &&
+        data.keys().hasOnly(['appId', 'index', 'data', 'ownerId', 'createdAt']) &&
+        data.appId is string && data.appId.size() >= 1 && data.appId.size() <= 128 && data.appId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.index is int && data.index >= 0 && data.index <= 40 &&
+        data.data is string && data.data.size() >= 1 && data.data.size() <= 750000 &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.ownerId == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    // Admins registry (read-only from client)
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+
+    // APK Showcase Apps Collection
+    match /apk_apps/{appId} {
+      allow get: if isValidId(appId) && (existing().published == true || isAdmin());
+      allow list: if existing().published == true || isAdmin();
+
+      allow create: if isSignedIn() &&
+        isValidId(appId) &&
+        isValidApkApp(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isSignedIn() &&
+        isValidId(appId) &&
+        isValidApkApp(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'desc', 'fullDesc', 'tag', 'version',
+            'apkFileName', 'apkSize', 'apkUrl', 'image', 'url',
+            'baseColor', 'chunkCount', 'features', 'tech',
+            'published', 'updatedAt'
+          ]) && isAdmin())
+        );
+
+      allow delete: if isSignedIn() && isValidId(appId) && isAdmin();
+
+      // Binary APK Chunks Subcollection
+      match /chunks/{chunkId} {
+        allow get: if isValidId(appId) && isValidId(chunkId) && (
+          get(/databases/$(database)/documents/apk_apps/$(appId)).data.published == true ||
+          isAdmin()
+        );
+        allow list: if false;
+
+        allow create: if isSignedIn() &&
+          isValidId(appId) &&
+          isValidId(chunkId) &&
+          isValidApkChunk(incoming()) &&
+          incoming().appId == appId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/apk_apps/$(appId)) &&
+          get(/databases/$(database)/documents/apk_apps/$(appId)).data.ownerId == request.auth.uid &&
+          isAdmin();
+
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(appId) && isValidId(chunkId) && isAdmin();
+      }
+    }
+  }
+}

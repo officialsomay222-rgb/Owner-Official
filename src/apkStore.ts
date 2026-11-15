@@ -4,13 +4,14 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   onSnapshot,
   query,
   serverTimestamp,
   setDoc,
   where,
 } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from './firebase';
+import { db, auth, ADMIN_EMAIL, handleFirestoreError, OperationType } from './firebase';
 
 export interface StoredApkApp {
   id: string;
@@ -194,49 +195,65 @@ function sanitizeApkAppPayload(input: StoredApkApp, uid: string) {
   };
 }
 
+function mapDocToApkApp(docSnap: { id: string; data: () => Record<string, any> }): StoredApkApp {
+  const d = docSnap.data();
+  return {
+    id: docSnap.id,
+    name: d.name || 'App',
+    desc: d.desc || '',
+    fullDesc: d.fullDesc || '',
+    tag: d.tag || 'Android APK',
+    version: d.version || 'v1.0.0',
+    apkFileName: d.apkFileName || 'app-release.apk',
+    apkSize: d.apkSize || '10 MB',
+    apkUrl: d.apkUrl || '',
+    image: d.image || '',
+    url: d.url || '#',
+    baseColor: d.baseColor || '#00ffd5',
+    chunkCount: typeof d.chunkCount === 'number' ? d.chunkCount : 0,
+    features: Array.isArray(d.features) ? d.features : ['Native Android APK'],
+    tech: Array.isArray(d.tech) ? d.tech : ['Android SDK'],
+    ownerId: d.ownerId || '',
+    published: Boolean(d.published),
+  };
+}
+
 export function subscribePublishedApkApps(
   onUpdate: (apps: StoredApkApp[]) => void
 ): () => void {
   const q = query(collection(db, 'apk_apps'), where('published', '==', true));
+
+  const applyCloudSnapshot = (cloudApps: StoredApkApp[]) => {
+    const localOnlyApps = loadCachedApkApps().filter(
+      (localApp) =>
+        localApp.published &&
+        localApp.ownerId === 'local_admin' &&
+        !cloudApps.some((c) => c.id === localApp.id)
+    );
+    const mergedApps = [...cloudApps, ...localOnlyApps];
+    saveCachedApkApps(
+      loadCachedApkApps()
+        .filter((a) => a.ownerId === 'local_admin' && !cloudApps.some((c) => c.id === a.id))
+        .concat(cloudApps)
+    );
+    onUpdate(mergedApps);
+  };
+
+  // Eagerly fetch directly from Firestore server so every visitor phone gets fresh cloud apps immediately
+  getDocsFromServer(q)
+    .then((snap) => {
+      const cloudApps = snap.docs.map(mapDocToApkApp);
+      applyCloudSnapshot(cloudApps);
+    })
+    .catch(() => {
+      // onSnapshot below handles live updates & error fallback
+    });
+
   return onSnapshot(
     q,
     (snapshot) => {
-      const cloudApps: StoredApkApp[] = snapshot.docs.map((docSnap) => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          name: d.name || 'App',
-          desc: d.desc || '',
-          fullDesc: d.fullDesc || '',
-          tag: d.tag || 'Android APK',
-          version: d.version || 'v1.0.0',
-          apkFileName: d.apkFileName || 'app-release.apk',
-          apkSize: d.apkSize || '10 MB',
-          apkUrl: d.apkUrl || '',
-          image: d.image || '',
-          url: d.url || '#',
-          baseColor: d.baseColor || '#00ffd5',
-          chunkCount: typeof d.chunkCount === 'number' ? d.chunkCount : 0,
-          features: Array.isArray(d.features) ? d.features : ['Native Android APK'],
-          tech: Array.isArray(d.tech) ? d.tech : ['Android SDK'],
-          ownerId: d.ownerId || '',
-          published: Boolean(d.published),
-        };
-      });
-      // Merge cloud-synced apps with any offline/local_admin entries so newly added APKs remain visible
-      const localOnlyApps = loadCachedApkApps().filter(
-        (localApp) =>
-          localApp.published &&
-          localApp.ownerId === 'local_admin' &&
-          !cloudApps.some((c) => c.id === localApp.id)
-      );
-      const mergedApps = [...cloudApps, ...localOnlyApps];
-      saveCachedApkApps(
-        loadCachedApkApps()
-          .filter((a) => a.ownerId === 'local_admin' && !cloudApps.some((c) => c.id === a.id))
-          .concat(cloudApps)
-      );
-      onUpdate(mergedApps);
+      const cloudApps = snapshot.docs.map(mapDocToApkApp);
+      applyCloudSnapshot(cloudApps);
     },
     (error) => {
       try {
@@ -250,36 +267,25 @@ export function subscribePublishedApkApps(
 }
 
 export async function fetchAllAdminApkApps(): Promise<StoredApkApp[]> {
-  if (!auth.currentUser) {
+  const isCloudAdmin =
+    Boolean(auth.currentUser) &&
+    auth.currentUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
+  if (!isCloudAdmin) {
     return loadCachedApkApps();
   }
+
   const path = 'apk_apps';
   try {
-    const snap = await getDocs(collection(db, path));
-    const list: StoredApkApp[] = snap.docs.map((docSnap) => {
-      const d = docSnap.data();
-      return {
-        id: docSnap.id,
-        name: d.name || 'App',
-        desc: d.desc || '',
-        fullDesc: d.fullDesc || '',
-        tag: d.tag || 'Android APK',
-        version: d.version || 'v1.0.0',
-        apkFileName: d.apkFileName || 'app-release.apk',
-        apkSize: d.apkSize || '10 MB',
-        apkUrl: d.apkUrl || '',
-        image: d.image || '',
-        url: d.url || '#',
-        baseColor: d.baseColor || '#00ffd5',
-        chunkCount: typeof d.chunkCount === 'number' ? d.chunkCount : 0,
-        features: Array.isArray(d.features) ? d.features : ['Native Android APK'],
-        tech: Array.isArray(d.tech) ? d.tech : ['Android SDK'],
-        ownerId: d.ownerId || '',
-        published: Boolean(d.published),
-      };
-    });
-    saveCachedApkApps(list);
-    return list;
+    const snap = await getDocsFromServer(collection(db, path));
+    const cloudList: StoredApkApp[] = snap.docs.map(mapDocToApkApp);
+    // Keep any un-synced local_admin items visible so admin can push them to cloud
+    const localUnsynced = loadCachedApkApps().filter(
+      (a) => a.ownerId === 'local_admin' && !cloudList.some((c) => c.id === a.id)
+    );
+    const combined = [...cloudList, ...localUnsynced];
+    saveCachedApkApps(combined);
+    return combined;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
   }
@@ -287,9 +293,20 @@ export async function fetchAllAdminApkApps(): Promise<StoredApkApp[]> {
 
 export async function publishOrUpdateApkApp(
   appData: StoredApkApp,
-  apkFile: File | null,
+  apkFile: Blob | File | null,
   onProgress?: (pct: number, statusText: string) => void
 ): Promise<StoredApkApp> {
+  if (!auth.currentUser) {
+    throw new Error(
+      `Sign in with Google (${ADMIN_EMAIL}) first so Firebase saves this app for every device.`
+    );
+  }
+  if (auth.currentUser.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    throw new Error(
+      `Signed in as ${auth.currentUser.email}. Please sign in with ${ADMIN_EMAIL} to publish to Firebase.`
+    );
+  }
+
   const safeId = appData.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100) || `apk_${Date.now()}`;
   const CHUNK_BYTE_SIZE = 480 * 1024; // ~640KB base64 per chunk (< 750KB limit)
 
@@ -297,19 +314,24 @@ export async function publishOrUpdateApkApp(
   let apkUrl = appData.apkUrl;
 
   if (apkFile) {
+    const hasExternalUrl =
+      apkUrl.startsWith('http://') || apkUrl.startsWith('https://');
+    if (apkFile.size > 18 * 1024 * 1024 && !hasExternalUrl) {
+      throw new Error(
+        'This .APK file is larger than 18 MB. Please paste a Direct APK Download URL (Google Drive, GitHub, or MediaFire link) so all phones can download it.'
+      );
+    }
+
     onProgress?.(10, 'Caching APK binary locally...');
     await saveLocalApkBlob(safeId, apkFile);
 
-    // If file is <= 18MB and user is signed into cloud, upload chunks to Firestore
-    if (auth.currentUser && apkFile.size <= 18 * 1024 * 1024) {
+    if (apkFile.size <= 18 * 1024 * 1024) {
       chunkCount = Math.ceil(apkFile.size / CHUNK_BYTE_SIZE);
-      apkUrl = 'cloud-chunks';
-    } else if (!apkUrl || apkUrl === 'cloud-chunks') {
-      apkUrl = 'local-idb';
+      apkUrl = hasExternalUrl ? apkUrl : 'cloud-chunks';
     }
   }
 
-  const uid = auth.currentUser?.uid || 'local_admin';
+  const uid = auth.currentUser.uid;
   const sanitized = sanitizeApkAppPayload(
     {
       ...appData,
@@ -325,65 +347,113 @@ export async function publishOrUpdateApkApp(
     ...sanitized,
   };
 
-  // Always update local cache immediately
-  const existingLocal = loadCachedApkApps().filter((a) => a.id !== safeId);
-  saveCachedApkApps([finalRecord, ...existingLocal]);
-
-  if (auth.currentUser) {
-    const docRef = doc(db, 'apk_apps', safeId);
-    onProgress?.(25, 'Syncing app record to Firestore...');
-    try {
-      const existingSnap = await getDoc(docRef);
-      if (existingSnap.exists()) {
-        const existingData = existingSnap.data();
-        await setDoc(docRef, {
-          ...sanitized,
-          ownerId: existingData.ownerId || uid,
-          createdAt: existingData.createdAt || serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        await setDoc(docRef, {
-          ...sanitized,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `apk_apps/${safeId}`);
+  let previousChunkCount = 0;
+  const docRef = doc(db, 'apk_apps', safeId);
+  onProgress?.(25, 'Writing app record to Firebase Firestore...');
+  try {
+    const existingSnap = await getDoc(docRef);
+    if (existingSnap.exists()) {
+      const existingData = existingSnap.data();
+      previousChunkCount = typeof existingData.chunkCount === 'number' ? existingData.chunkCount : 0;
+      await setDoc(docRef, {
+        ...sanitized,
+        ownerId: existingData.ownerId || uid,
+        createdAt: existingData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(docRef, {
+        ...sanitized,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
     }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `apk_apps/${safeId}`);
+  }
 
-    // Upload binary chunks if an APK file was selected and fits cloud chunk limit
-    if (apkFile && chunkCount > 0 && apkUrl === 'cloud-chunks') {
-      const buffer = await apkFile.arrayBuffer();
-      for (let i = 0; i < chunkCount; i++) {
-        const start = i * CHUNK_BYTE_SIZE;
-        const end = Math.min(buffer.byteLength, start + CHUNK_BYTE_SIZE);
-        const slice = buffer.slice(start, end);
-        const base64Data = arrayBufferToBase64(slice);
-        const chunkId = `chunk_${i}`;
-        const chunkPath = `apk_apps/${safeId}/chunks/${chunkId}`;
-
-        const pct = 30 + Math.round(((i + 1) / chunkCount) * 65);
-        onProgress?.(pct, `Uploading APK part ${i + 1} of ${chunkCount}...`);
-
-        try {
-          await setDoc(doc(db, 'apk_apps', safeId, 'chunks', chunkId), {
-            appId: safeId,
-            index: i,
-            data: base64Data,
-            ownerId: uid,
-            createdAt: serverTimestamp(),
-          });
-        } catch (error) {
-          handleFirestoreError(error, OperationType.CREATE, chunkPath);
-        }
+  // Delete old binary chunks before creating new ones (rules forbid overwriting chunks directly)
+  if (apkFile && previousChunkCount > 0) {
+    for (let i = 0; i < previousChunkCount; i++) {
+      try {
+        await deleteDoc(doc(db, 'apk_apps', safeId, 'chunks', `chunk_${i}`));
+      } catch {
+        // ignore missing chunk
       }
     }
   }
 
-  onProgress?.(100, 'APK Published Successfully!');
+  // Upload binary chunks if an APK file was selected and fits cloud chunk limit
+  if (apkFile && chunkCount > 0 && apkUrl === 'cloud-chunks') {
+    const buffer = await apkFile.arrayBuffer();
+    for (let i = 0; i < chunkCount; i++) {
+      const start = i * CHUNK_BYTE_SIZE;
+      const end = Math.min(buffer.byteLength, start + CHUNK_BYTE_SIZE);
+      const slice = buffer.slice(start, end);
+      const base64Data = arrayBufferToBase64(slice);
+      const chunkId = `chunk_${i}`;
+      const chunkPath = `apk_apps/${safeId}/chunks/${chunkId}`;
+
+      const pct = 30 + Math.round(((i + 1) / chunkCount) * 65);
+      onProgress?.(pct, `Uploading APK part ${i + 1} of ${chunkCount} to Firebase...`);
+
+      try {
+        await setDoc(doc(db, 'apk_apps', safeId, 'chunks', chunkId), {
+          appId: safeId,
+          index: i,
+          data: base64Data,
+          ownerId: uid,
+          createdAt: serverTimestamp(),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, chunkPath);
+      }
+    }
+  }
+
+  // Update local cache only after Firebase Firestore succeeded
+  const existingLocal = loadCachedApkApps().filter((a) => a.id !== safeId);
+  saveCachedApkApps([finalRecord, ...existingLocal]);
+
+  onProgress?.(100, 'Synced to Firebase Cloud! Visible on all phones.');
   return finalRecord;
+}
+
+// Push any previously saved local_admin apps on this phone up to Firebase Cloud
+export async function syncLocalAppsToCloud(
+  onProgress?: (statusText: string) => void
+): Promise<number> {
+  if (!auth.currentUser || auth.currentUser.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    return 0;
+  }
+
+  const localOnly = loadCachedApkApps().filter(
+    (a) =>
+      a.ownerId === 'local_admin' &&
+      a.id !== 'loki_x_prime_apk' &&
+      a.id !== 'commerce_prime_apk'
+  );
+  if (localOnly.length === 0) return 0;
+
+  let syncedCount = 0;
+  for (const app of localOnly) {
+    onProgress?.(`Syncing "${app.name}" to Firebase Cloud...`);
+    const localBlob = await getLocalApkBlob(app.id);
+    const hasExternalUrl =
+      app.apkUrl.startsWith('http://') || app.apkUrl.startsWith('https://');
+    const usableBlob =
+      localBlob && (localBlob.size <= 18 * 1024 * 1024 || hasExternalUrl) ? localBlob : null;
+    await publishOrUpdateApkApp(
+      {
+        ...app,
+        apkUrl:
+          !usableBlob && app.apkUrl === 'local-idb' ? 'cloud-chunks' : app.apkUrl,
+      },
+      usableBlob
+    );
+    syncedCount++;
+  }
+  return syncedCount;
 }
 
 export async function removeApkApp(appId: string, chunkCount = 0): Promise<void> {

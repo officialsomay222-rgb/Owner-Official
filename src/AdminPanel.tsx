@@ -16,6 +16,9 @@ import {
   EyeOff,
   Edit3,
   AlertCircle,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import { auth, googleProvider, ADMIN_EMAIL } from './firebase';
 import {
@@ -23,6 +26,7 @@ import {
   fetchAllAdminApkApps,
   publishOrUpdateApkApp,
   removeApkApp,
+  syncLocalAppsToCloud,
   compressImageFile,
   triggerApkDownload,
 } from './apkStore';
@@ -73,6 +77,8 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -86,25 +92,62 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
     try {
       const list = await fetchAllAdminApkApps();
       setApps(list);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Could not load apps from Firebase.');
     } finally {
       setLoadingApps(false);
     }
   };
 
+  const handleSyncLocalToCloud = async (quietIfNone = false) => {
+    setIsSyncingCloud(true);
+    setErrorMessage('');
+    try {
+      const count = await syncLocalAppsToCloud((msg) => setStatusMessage(msg));
+      await loadApps();
+      onAppsChanged();
+      if (count > 0) {
+        setStatusMessage(
+          `Synced ${count} local app${count > 1 ? 's' : ''} to Firebase Cloud! Now visible on all phones.`
+        );
+      } else if (!quietIfNone) {
+        setStatusMessage('All apps are already synced with Firebase Cloud.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to sync local apps to Firebase Cloud.');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading) {
-      loadApps();
+      const isAdminEmail =
+        user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      if (isAdminEmail) {
+        handleSyncLocalToCloud(true);
+      } else {
+        loadApps();
+      }
     }
   }, [user, authLoading]);
 
   const handleGoogleSignIn = async () => {
     setErrorMessage('');
+    setStatusMessage('');
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Google Sign-In failed. You can still publish locally.');
+      if (err?.code === 'auth/popup-blocked') {
+        setErrorMessage(
+          'Popup was blocked by your browser. Allow popups for this site and tap Sign In again.'
+        );
+      } else {
+        setErrorMessage(
+          err?.message ||
+            'Google Sign-In failed. Sign in with officialsomay222@gmail.com to publish to Firebase.'
+        );
+      }
     }
   };
 
@@ -158,10 +201,16 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
   const handleApkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setErrorMessage('');
     setSelectedApkFile(file);
     setApkFileName(file.name.endsWith('.apk') ? file.name : `${file.name}.apk`);
     const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
     setApkSize(`${sizeMB} MB`);
+    if (file.size > 18 * 1024 * 1024) {
+      setErrorMessage(
+        `This APK is ${sizeMB} MB (over 18 MB Firebase chunk limit). Paste a Direct APK Download URL below so other phones can download it.`
+      );
+    }
     if (!name) {
       const baseName = file.name.replace(/\.apk$/i, '').replace(/[-_]/g, ' ');
       setName(baseName);
@@ -241,6 +290,15 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
       published,
     };
 
+    if (!isCloudAdmin) {
+      setErrorMessage(
+        user
+          ? `Signed in as ${user.email}. Switch to ${ADMIN_EMAIL} to save to Firebase Cloud.`
+          : `Sign in with Google (${ADMIN_EMAIL}) first so your app saves to Firebase and shows on all phones.`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await publishOrUpdateApkApp(record, selectedApkFile, (pct, msg) => {
@@ -250,9 +308,9 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
       await loadApps();
       onAppsChanged();
       resetForm();
-      setStatusMessage('APK App saved & live in the Apps section!');
+      setStatusMessage('Published to Firebase Cloud! Now visible on every phone.');
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to save APK app.');
+      setErrorMessage(err?.message || 'Failed to save APK app to Firebase.');
     } finally {
       setIsSubmitting(false);
     }
@@ -260,6 +318,10 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
 
   const handleDelete = async (app: StoredApkApp) => {
     setErrorMessage('');
+    if (!isCloudAdmin && app.ownerId !== 'local_admin') {
+      setErrorMessage(`Sign in with Google (${ADMIN_EMAIL}) to delete cloud apps.`);
+      return;
+    }
     try {
       await removeApkApp(app.id, app.chunkCount);
       await loadApps();
@@ -271,6 +333,11 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
   };
 
   const handleTogglePublish = async (app: StoredApkApp) => {
+    setErrorMessage('');
+    if (!isCloudAdmin) {
+      setErrorMessage(`Sign in with Google (${ADMIN_EMAIL}) to update cloud visibility.`);
+      return;
+    }
     try {
       await publishOrUpdateApkApp({ ...app, published: !app.published }, null);
       await loadApps();
@@ -281,6 +348,7 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
   };
 
   const isCloudAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const localOnlyCount = apps.filter((a) => a.ownerId === 'local_admin').length;
 
   return (
     <div
@@ -350,7 +418,61 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-6 sm:pt-10 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* Firebase Cloud Sync Banner */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-6">
+        {isCloudAdmin ? (
+          <div className="rounded-2xl border border-[#00ffd5]/30 bg-[#00ffd5]/10 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Cloud className="w-5 h-5 text-[#00ffd5] shrink-0" />
+              <div>
+                <p className="text-xs font-mono font-bold uppercase tracking-wider text-[#00ffd5]">
+                  Firebase Cloud Connected ({user?.email})
+                </p>
+                <p className="text-[11px] text-zinc-300">
+                  Apps published here save to Firestore and show up on every phone and browser.
+                </p>
+              </div>
+            </div>
+
+            {localOnlyCount > 0 && (
+              <button
+                type="button"
+                disabled={isSyncingCloud}
+                onClick={() => handleSyncLocalToCloud(false)}
+                className="px-4 py-2 rounded-xl bg-[#00ffd5] text-black font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                <span>Push {localOnlyCount} Local App{localOnlyCount > 1 ? 's' : ''} to Cloud</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CloudOff className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <p className="text-xs font-mono font-bold uppercase tracking-wider text-amber-300">
+                  {user
+                    ? `Wrong Account (${user.email}) — Firebase Sync Locked`
+                    : 'Not Signed In to Firebase Cloud'}
+                </p>
+                <p className="text-[11px] text-zinc-300 mt-0.5">
+                  Sign in with <span className="font-mono font-bold text-white">{ADMIN_EMAIL}</span> so your apps upload to Firebase and appear on everyone&apos;s phone (not just yours).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="px-4 py-2.5 rounded-xl bg-[#00ffd5] text-black font-bold text-xs tracking-wider uppercase hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+            >
+              Sign In with Google
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Add / Upload APK Form */}
         <div className="lg:col-span-7">
           <div
@@ -772,13 +894,26 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
                           <p className="text-[11px] font-mono text-zinc-400 truncate mt-0.5">
                             {app.apkFileName} · {app.apkSize}
                           </p>
-                          <span
-                            className={`inline-block mt-1 text-[10px] font-mono uppercase tracking-wider ${
-                              app.published ? 'text-emerald-400' : 'text-zinc-500'
-                            }`}
-                          >
-                            {app.published ? '● Live in Apps Section' : '○ Hidden Draft'}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span
+                              className={`text-[10px] font-mono uppercase tracking-wider ${
+                                app.published ? 'text-emerald-400' : 'text-zinc-500'
+                              }`}
+                            >
+                              {app.published ? '● Live in Apps' : '○ Draft'}
+                            </span>
+                            <span
+                              className={`text-[10px] font-mono uppercase tracking-wider ${
+                                app.ownerId === 'local_admin'
+                                  ? 'text-amber-400'
+                                  : 'text-[#00ffd5]'
+                              }`}
+                            >
+                              {app.ownerId === 'local_admin'
+                                ? '· Local Phone Only'
+                                : '· Firebase Cloud'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 

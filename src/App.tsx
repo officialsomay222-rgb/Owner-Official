@@ -707,6 +707,7 @@ export default function App() {
   );
   const [downloadingApkId, setDownloadingApkId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const downloadLockRef = useRef<boolean>(false);
 
   useEffect(() => {
     const checkHash = () => {
@@ -1029,15 +1030,18 @@ export default function App() {
   }, [isLight]);
 
   const handleDownloadApkFromModal = async (apk: StoredApkApp) => {
+    if (downloadLockRef.current) return;
+    downloadLockRef.current = true;
     setDownloadingApkId(apk.id);
-    setDownloadProgress(10);
+    setDownloadProgress(8);
     try {
       await triggerApkDownload(apk, (pct) => setDownloadProgress(pct));
     } finally {
       setTimeout(() => {
+        downloadLockRef.current = false;
         setDownloadingApkId(null);
         setDownloadProgress(0);
-      }, 900);
+      }, 500);
     }
   };
 
@@ -1414,15 +1418,25 @@ export default function App() {
                       {app.apkData && (
                         <button
                           type="button"
+                          disabled={Boolean(downloadingApkId)}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (app.apkData) handleDownloadApkFromModal(app.apkData);
                           }}
-                          className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider text-black flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition-opacity whitespace-nowrap"
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider text-black flex items-center gap-1.5 cursor-pointer hover:opacity-90 active:scale-[0.97] transition-all whitespace-nowrap disabled:opacity-65 disabled:cursor-not-allowed"
                           style={{ backgroundColor: app.baseColor }}
                         >
-                          <Download className="w-3 h-3" />
-                          <span>APK ({app.apkData.apkSize})</span>
+                          {downloadingApkId === app.apkData.id ? (
+                            <>
+                              <span className="w-3 h-3 rounded-full border-2 border-black/25 border-t-black animate-spin shrink-0" />
+                              <span>{downloadProgress}%...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-3 h-3 shrink-0" />
+                              <span>APK ({app.apkData.apkSize})</span>
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
@@ -1937,13 +1951,17 @@ export default function App() {
                   {activeApp.apkData && (
                     <button
                       type="button"
-                      disabled={downloadingApkId === activeApp.apkData.id}
+                      disabled={Boolean(downloadingApkId)}
                       onClick={() =>
                         activeApp.apkData && handleDownloadApkFromModal(activeApp.apkData)
                       }
-                      className="w-full py-4 rounded-xl bg-gradient-to-r from-[#00ffd5] via-[#00d5ff] to-[#ff00c8] text-black font-display font-black text-xs sm:text-sm uppercase tracking-[0.22em] flex items-center justify-center gap-3 shadow-xl hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60"
+                      className="w-full py-4 rounded-xl bg-gradient-to-r from-[#00ffd5] via-[#00d5ff] to-[#ff00c8] text-black font-display font-black text-xs sm:text-sm uppercase tracking-[0.22em] flex items-center justify-center gap-3 shadow-xl hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-65 disabled:cursor-not-allowed"
                     >
-                      <Download className="w-4 h-4" />
+                      {downloadingApkId === activeApp.apkData.id ? (
+                        <span className="w-4 h-4 rounded-full border-2 border-black/25 border-t-black animate-spin shrink-0" />
+                      ) : (
+                        <Download className="w-4 h-4 shrink-0" />
+                      )}
                       <span>
                         {downloadingApkId === activeApp.apkData.id
                           ? `Downloading APK (${downloadProgress}%)...`

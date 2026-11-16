@@ -86,6 +86,7 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
   const [passkeyInput, setPasskeyInput] = useState<string>('');
   const [passkeyHash, setPasskeyHash] = useState<string>(() => loadStoredPasskeyHash());
   const [verifyingPasskey, setVerifyingPasskey] = useState<boolean>(false);
+  const [testingDownloadId, setTestingDownloadId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
@@ -996,11 +997,24 @@ export default function AdminPanel({ onExitAdmin, onAppsChanged, isLight }: Admi
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
-                          onClick={() => triggerApkDownload(app)}
+                          disabled={Boolean(testingDownloadId)}
+                          onClick={async () => {
+                            if (testingDownloadId) return;
+                            setTestingDownloadId(app.id);
+                            try {
+                              await triggerApkDownload(app);
+                            } finally {
+                              setTimeout(() => setTestingDownloadId(null), 500);
+                            }
+                          }}
                           title="Test APK Download"
-                          className="p-2 rounded-lg border border-white/10 hover:border-[#00ffd5] text-[#00ffd5] cursor-pointer"
+                          className="p-2 rounded-lg border border-white/10 hover:border-[#00ffd5] text-[#00ffd5] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Download className="w-3.5 h-3.5" />
+                          {testingDownloadId === app.id ? (
+                            <span className="block w-3.5 h-3.5 rounded-full border-2 border-[#00ffd5]/30 border-t-[#00ffd5] animate-spin" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
                         </button>
                         <button
                           type="button"
